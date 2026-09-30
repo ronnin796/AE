@@ -1,0 +1,54 @@
+# ORS - Edge Daemon
+[package]
+name = "aetheredge-edge"
+version = "0.1.0"
+edition = "2021"
+description = "AetherEdge Rust Edge Daemon"
+license = "MIT"
+repository = "https://github.com/your-org/aetheredge"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.38", features = ["full"] }
+
+# Configuration
+config = "0.14"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+anyhow = "1.0"
+
+# Serialization (MessagePack)
+rmp-serde = "1.1"
+
+# System information (for node identity)
+sysinfo = "0.30"
+
+# ONNX Runtime for inference
+ort = { version = "2.0.0-rc.13", features = ["load-dynamic"] }
+
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# UUID for node identification
+uuid = { version = "1.7", features = ["v4", "serde", "fast-rng"] }
+
+# Bytes for network buffers
+bytes = "1.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+serial_test = "2.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
