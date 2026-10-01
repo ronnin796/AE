@@ -8,11 +8,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use crate::node::NodeIdentity;
-use crate::protocol::{decode_envelope, encode_envelope, Envelope, MessageType};
-use crate::protocol::messages::{Heartbeat, HeartbeatAck, Register, RegisterResponse, Telemetry};
+use crate::protocol::{encode_envelope, Envelope, MessageType};
+use crate::protocol::messages::{Heartbeat, HeartbeatAck, Register, RegisterResponse};
 
 /// Network client for communicating with the server
 pub struct NetworkClient {
@@ -81,7 +81,7 @@ impl NetworkClient {
 
     /// Ensure connection is active, reconnect if needed
     async fn ensure_connected(&self) -> Result<()> {
-        let mut stream_guard = self.stream.lock().await;
+        let stream_guard = self.stream.lock().await;
 
         if stream_guard.is_none() {
             drop(stream_guard);
@@ -102,6 +102,7 @@ impl NetworkClient {
         // Send request
         let data = encode_envelope(&envelope)?;
         debug!("Sending message type {:?}, {} bytes", envelope.msg_type, data.len());
+        debug!("First 10 bytes: {:?}", &data[..std::cmp::min(10, data.len())]);
 
         timeout(self.request_timeout, stream.write_all(&data))
             .await
@@ -117,6 +118,8 @@ impl NetworkClient {
 
         // Verify magic bytes
         if &header[0..4] != crate::protocol::MAGIC_BYTES {
+            debug!("Received header magic bytes: {:?}, expected: {:?}",
+                   &header[0..4], crate::protocol::MAGIC_BYTES);
             anyhow::bail!("Invalid magic bytes in response");
         }
 
@@ -132,7 +135,7 @@ impl NetworkClient {
             .context("Read payload timeout")?
             .context("Failed to read payload")?;
 
-        let response = decode_envelope(&payload)?;
+        let response: Envelope = crate::protocol::deserialize(&payload)?;
         debug!("Received response type {:?}", response.msg_type);
 
         Ok(response)

@@ -1,7 +1,7 @@
 //! Logging initialization and configuration
 
 use anyhow::Result;
-use tracing::{Level, Subscriber};
+use tracing::Level;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 /// Initialize the global tracing subscriber

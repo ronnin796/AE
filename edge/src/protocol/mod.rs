@@ -7,8 +7,6 @@ use rmp_serde::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
-use messages::*;
-
 /// Protocol version
 pub const PROTOCOL_VERSION: u8 = 1;
 
@@ -38,7 +36,7 @@ pub struct Envelope {
 }
 
 /// Message type identifiers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(u8)]
 pub enum MessageType {
     Register = 1,
@@ -71,7 +69,7 @@ impl MessageType {
 /// Serialize a message to MessagePack bytes
 pub fn serialize<T: Serialize>(msg: &T) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
-    msg.serialize(&mut Serializer::new(&mut buf))?;
+    msg.serialize(&mut Serializer::new(&mut buf).with_struct_map())?;
     Ok(buf)
 }
 
@@ -192,9 +190,13 @@ mod tests {
             node_id: "test-node".to_string(),
             hostname: "test-host".to_string(),
             os: "Linux".to_string(),
+            os_version: "5.4".to_string(),
+            kernel_version: "5.4.0".to_string(),
+            cpu_brand: "Intel i7".to_string(),
             cpu_cores: 4,
             total_memory: 8_000_000_000,
             version: "0.1.0".to_string(),
+            arch: "x86_64".to_string(),
             capabilities: vec!["telemetry".to_string(), "inference".to_string()],
         };
 

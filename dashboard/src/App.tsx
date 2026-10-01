@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { NodeListResponse, Node } from "../types";
-import { useOnlineNodes, useOfflineNodes, useAggregatedTelemetry, useTelemetryStats } from "../hooks";
+import { useNodes, useOnlineNodes, useOfflineNodes } from "./hooks/useNodes";
+import { useAggregatedTelemetry, useTelemetryStats } from "./hooks/useTelemetry";
 
 import NavBar from "./components/NavBar";
 import NodeOverview from "./components/NodeOverview";
@@ -14,17 +12,13 @@ function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
   // Fetch nodes
-  const { data: nodesData, isLoading } = useQuery<NodeListResponse>({
-    queryKey: ["nodes", 1, 20],
-    queryFn: () => api.getNodes(1, 20),
-    refetchInterval: 5000,
-  });
+  const { data: nodesData } = useNodes(1, 20);
 
   // Fetch online nodes
-  const onlineNodes = useOnlineNodes();
+  const { data: onlineNodes = [] } = useOnlineNodes();
 
   // Fetch offline nodes
-  const offlineNodes = useOfflineNodes();
+  const { data: offlineNodes = [] } = useOfflineNodes();
 
   // Node telemetry if selected
   const { data: aggregatedTelemetry, refetch: refetchTelemetry } = useAggregatedTelemetry(
@@ -32,9 +26,9 @@ function App() {
     50
   );
 
-  const { data: stats, isLoading: statsLoading } = selectedNode
+  const { data: stats } = selectedNode
     ? useTelemetryStats(selectedNode)
-    : { data: null, isLoading: false };
+    : { data: null };
 
   return (
     <div className="app">
@@ -60,7 +54,6 @@ function App() {
         )}
         {!selectedNode && (
           <NodeList
-            nodes={nodesData?.nodes || []}
             onSelect={(nodeId: string) => setSelectedNode(nodeId)}
           />
         )}

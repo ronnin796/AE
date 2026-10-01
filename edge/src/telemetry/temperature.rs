@@ -19,7 +19,7 @@ impl TemperatureCollector {
         let type_path = path.join("type");
 
         // Read sensor type for filtering
-        let sensor_type = fs::read_to_string(&type_path)
+        let _sensor_type = fs::read_to_string(&type_path)
             .unwrap_or_default()
             .trim()
             .to_string();

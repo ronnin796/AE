@@ -1,83 +1,143 @@
-"""Model export and quantization for ONNX Runtime"""
-"""
-AetherEdge ML Tooling - Python scripts for model preparation and quantization
+#!/usr/bin/env python3
+"""Export PyTorch models to ONNX format for AetherEdge
 
-This module provides tools for:
-1. Exporting PyTorch models to ONNX format
-2. Static INT8 quantization
-3. Model benchmarking (FP32 vs INT8)
+Part I: Basic ONNX export pipeline
 """
 
+import logging
+import sys
 from pathlib import Path
-import numpy as np
+from typing import Optional, Tuple, List, Dict, Any
+
 import torch
-import onnx
-from onnx import helper
-from onnxruntime import quantization
-import json
-import os
-from typing import Optional, Tuple
+import torch.nn as nn
+import numpy as np
 
-# Global model path for demo purposes
-DEFAULT_MODEL_PATH = "models/example-model/model.onnx"
+# Add parent directory to path for utils import
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils import setup_logging, save_metadata, format_size
+
+logger = logging.getLogger(__name__)
 
 
-class ModelExporter:
-    """Utility class for model export and quantization"""
+class SimpleMLP(nn.Module):
+    """Simple MLP for demonstration"""
 
-    def __init__(self, model_path: Optional[str] = None):
-        self.model_path = Path(model_path) if model_path else None
-        self.model = None
+    def __init__(self, input_size: int = 784, hidden_size: int = 128, num_classes: int = 10):
+        super(SimpleMLP, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, num_classes)
 
-    def export_model(self, model: torch.nn.Module,
-                    output_dir: str = "models",
-                    model_name: str = "example-model") -> Path:
-        """
-        Export PyTorch model to ONNX format
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
 
-        Args:
-            model: PyTorch model to export
-            output_dir: Directory to save the model
-            model_name: Name for the model file
 
-        Returns:
-            Path to the exported ONNX model
-        """
-        # Create models directory if it doesn't exist
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+def create_demo_model() -> Tuple[nn.Module, Dict[str, Any]]:
+    """Create a demo PyTorch model for export.
 
-        # Save model with proper path
-        model_path = output_dir / f"{model_name}.onnx"
+    Returns:
+        Model instance and example input shape
+    """
+    model = SimpleMLP(input_size=784, hidden_size=128, num_classes=10)
+    model.eval()
 
-        # Export model
-        torch.onnx.export(
-            model,
-            torch.randn(1, 3, 224, 224),  # Example input shape
-            model_path,
-            export_params=True,
-            opset_version=14,
-            do_constant_folding=True,
-            input_names=["input"],
-            output_names=["output"],
-        )
+    # Example input for ONNX export
+    example_input = torch.randn(1, 784)
 
-        info(f"Model exported to: {model_path}")
-        return model_path
+    metadata = {
+        "model_type": "MLP",
+        "input_size": 784,
+        "hidden_size": 128,
+        "num_classes": 10,
+        "input_shape": [1, 784],
+        "output_shape": [1, 10],
+        "framework": "PyTorch",
+        "export_format": "ONNX"
+    }
 
-    def export_example_model(self) -> Path:
-        """Export a sample model for demonstration"""
-        model_path = self.export_model(self._create_dummy_model(), "models", "example-model")
-        return model_path
+    return model, metadata, example_input
 
-    def _create_dummy_model(self) -> torch.nn.Module:
-        """Create a simple model for demonstration"""
-        class DummyModel(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.fc = torch.nn.Linear(100, 10)
 
-            def forward(self, x):
-                return self.fc(x)
+def export_to_onnx(
+    model: nn.Module,
+    example_input: torch.Tensor,
+    output_path: Path,
+    metadata: Dict[str, Any],
+    opset_version: int = 11
+) -> Path:
+    """Export PyTorch model to ONNX format.
 
-        return DummyModel()
+    Args:
+        model: PyTorch model (in eval mode)
+        example_input: Example input tensor for tracing
+        output_path: Output path for ONNX file
+        metadata: Model metadata
+        opset_version: ONNX opset version
+
+    Returns:
+        Path to exported ONNX file
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Export to ONNX
+    torch.onnx.export(
+        model,
+        example_input,
+        str(output_path),
+        opset_version=opset_version,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={
+            "input": {0: "batch_size"},
+            "output": {0: "batch_size"}
+        }
+    )
+
+    logger.info(f"Exported model to {output_path}")
+    logger.info(f"Model size: {format_size(output_path.stat().st_size)}")
+
+    # Save metadata
+    metadata["onnx_opset"] = opset_version
+    metadata["model_size_bytes"] = output_path.stat().st_size
+    save_metadata(output_path.parent, metadata)
+
+    return output_path
+
+
+def prepare_model(
+    output_dir: Path = Path("models/example-model"),
+    input_size: int = 784,
+    hidden_size: int = 128,
+    num_classes: int = 10
+) -> Path:
+    """Prepare and export a demo model.
+
+    Args:
+        output_dir: Output directory for model
+        input_size: Input features size
+        hidden_size: Hidden layer size
+        num_classes: Number of output classes
+
+    Returns:
+        Path to exported ONNX model
+    """
+    logger.info("Creating demo model...")
+    model, metadata, example_input = create_demo_model()
+
+    onnx_path = output_dir / "model.onnx"
+    logger.info(f"Exporting to {onnx_path}...")
+
+    export_to_onnx(model, example_input, onnx_path, metadata)
+
+    logger.info("Model preparation complete!")
+    return onnx_path
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    model_path = prepare_model()
+    print(f"Exported model: {model_path}")

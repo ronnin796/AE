@@ -56,7 +56,7 @@ pub struct HeartbeatAck {
 }
 
 /// Node status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(u8)]
 pub enum NodeStatus {
     Online = 1,

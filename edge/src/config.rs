@@ -147,7 +147,7 @@ impl Config {
     pub fn load(config_path: Option<&Path>) -> Result<Self> {
         let mut builder = ConfigLib::builder()
             .set_default("node.node_id", "")?
-            .set_default("node.hostname", "")?
+            .set_default("node.hostname", None::<String>)?
             .set_default("server.address", "127.0.0.1:8080")?
             .set_default("server.reconnect_interval", 5)?
             .set_default("network.heartbeat_interval", 10)?
@@ -175,7 +175,8 @@ impl Config {
                 &format!("{}/.config/aetheredge/edge.toml", std::env::var("HOME").unwrap_or_default()),
             ] {
                 if Path::new(path).exists() {
-                    builder = builder.add_source(File::from(path).format(FileFormat::Toml));
+                    let path_buf = std::path::PathBuf::from(path);
+                    builder = builder.add_source(File::from(path_buf).format(FileFormat::Toml));
                     break;
                 }
             }

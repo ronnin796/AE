@@ -14,7 +14,7 @@ from app.schemas.telemetry import (
     TelemetryAggregated,
     TelemetryStats,
 )
-from app.services.telemetry_service import (
+from app.services.database import (
     add_telemetry,
     get_telemetry,
     get_telemetry_for_node,

@@ -1,20 +1,22 @@
 import React from "react";
-import { Node, NodeListResponse } from "../types";
-import { useNodes } from "../hooks/useNodes";
-import { useEffect, useState } from "react";
+import { Node } from "../types";
+import { useNodes, useOnlineNodes, useOfflineNodes } from "../hooks/useNodes";
+import NodeCard from "./NodeCard";
 
 interface NodeListProps {
   onSelect: (nodeId: string) => void;
 }
 
 export default function NodeList({ onSelect }: NodeListProps) {
-  const { data: nodes, isLoading } = useNodes(1, 20);
-  const [nodes, setNodes] = useState<NodeListResponse['nodes']>([]);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const { data: nodesData } = useNodes(1, 20);
+  const { data: onlineNodes = [] } = useOnlineNodes();
+  const { data: offlineNodes = [] } = useOfflineNodes();
+  const [nodes, setNodes] = React.useState<Node[]>([]);
+  const [page, setPage] = React.useState(1);
+  const [total, setTotal] = React.useState(0);
+  const pageSize = 20;
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (nodesData) {
       setNodes(nodesData.nodes);
       setTotal(nodesData.total);
@@ -22,11 +24,7 @@ export default function NodeList({ onSelect }: NodeListProps) {
     }
   }, [nodesData]);
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-  }
-
-  if (isLoading) {
+  if (!nodesData) {
     return <div className="loading">Loading nodes...</div>;
   }
 
@@ -47,14 +45,14 @@ export default function NodeList({ onSelect }: NodeListProps) {
         <span>Page {page} of {Math.ceil(total / pageSize)}</span>
         <button onClick={() => setPage(page + 1)} className="page-btn">Next</button>
       </div>
-    </div>
 
-    {nodes.length > 0 && (
-      <div className="node-list">
-        {nodes.map((node) => (
-          <NodeCard key={node.node_id} node={node} onSelect={onSelect} />
-        ))}
-      </div>
+      {nodes.length > 0 && (
+        <div className="node-list">
+          {nodes.map((node) => (
+            <NodeCard key={node.node_id} node={node} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

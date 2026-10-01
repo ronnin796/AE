@@ -5,19 +5,7 @@ use tokio::time::interval;
 use anyhow::{Context, Result};
 use clap::Parser;
 use tracing::{debug, error, info};
-
-mod config;
-mod logging;
-mod node;
-mod networking;
-mod protocol;
-mod telemetry;
-
-use crate::config::Config;
-use crate::logging;
-use crate::node::NodeIdentity;
-use crate::networking::NetworkClient;
-use crate::telemetry::TelemetryCollector;
+use aetheredge_edge::{Config, NodeIdentity, NetworkClient, TelemetryCollector};
 
 #[derive(Parser, Debug)]
 #[command(name = "aetheredge-edge", version, about = "AetherEdge Edge Daemon")]
@@ -27,7 +15,7 @@ struct Args {
     node_id: Option<String>,
 
     /// Server address (host:port)
-    #[arg(long, env = "AETHEREDGE_SERVER_ADDR", default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "AETHEREDGE_SERVER_ADDR", default_value = "127.0.0.1:8081")]
     server_addr: String,
 
     /// Config file path
@@ -56,7 +44,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize logging
-    logging::init(&args.log_level)?;
+    aetheredge_edge::logging::init(&args.log_level)?;
 
     info!("Starting AetherEdge Edge Daemon v{}", env!("CARGO_PKG_VERSION"));
 
@@ -73,7 +61,7 @@ async fn main() -> Result<()> {
         .context("Invalid server address format (expected host:port)")?;
 
     // Create network client
-    let network_client = NetworkClient::new(server_addr, node_identity.clone());
+    let mut network_client = NetworkClient::new(server_addr, node_identity.clone());
 
     // Connect to server
     network_client.connect().await
@@ -86,7 +74,7 @@ async fn main() -> Result<()> {
     info!("Registration successful: {}", register_response.message);
 
     // Convert config telemetry to the correct type
-    let telemetry_config = crate::telemetry::TelemetryConfig {
+    let telemetry_config = aetheredge_edge::TelemetryConfig {
         collect_cpu: config.telemetry.collect_cpu,
         collect_memory: config.telemetry.collect_memory,
         collect_temperature: config.telemetry.collect_temperature,
@@ -96,7 +84,7 @@ async fn main() -> Result<()> {
 
     // Start heartbeat task
     if !args.no_heartbeat {
-        let mut hb_client = network_client.clone();
+        let hb_client = network_client.clone();
         let hb_identity = node_identity.clone();
 
         tokio::spawn(async move {
@@ -114,7 +102,7 @@ async fn main() -> Result<()> {
 
     // Start telemetry collection task
     if !args.no_telemetry {
-        let mut tel_client = network_client.clone();
+        let tel_client = network_client.clone();
         let tel_identity = node_identity.clone();
         let mut collector = TelemetryCollector::new(telemetry_config);
 

@@ -1,5 +1,3 @@
-import React from "react";
-
 interface NavBarProps {
   selectedNode: string | null;
   onNodeSelect: (nodeId: string) => void;

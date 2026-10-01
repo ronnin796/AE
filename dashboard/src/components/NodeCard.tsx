@@ -4,10 +4,11 @@ import { Node, TelemetryStats } from "../types";
 interface NodeCardProps {
   node: Node;
   stats?: TelemetryStats | null;
-  isLoadingStats: boolean;
+  isLoadingStats?: boolean;
+  onSelect: (nodeId: string) => void;
 }
 
-export default function NodeCard({ node, stats, isLoadingStats }: NodeCardProps) {
+export default function NodeCard({ node, stats, isLoadingStats, onSelect }: NodeCardProps) {
   const statusColor = {
     online: "bg-green-500",
     offline: "bg-red-500",
@@ -18,7 +19,7 @@ export default function NodeCard({ node, stats, isLoadingStats }: NodeCardProps)
   const statusClass = statusColor[node.status] || "bg-gray-500";
 
   return (
-    <div className="node-card">
+    <div className="node-card" onClick={() => onSelect(node.node_id)}>
       <div className="card-header">
         <h3>{node.hostname || node.node_id}</h3>
         <span className={`status-indicator ${statusClass}`}>

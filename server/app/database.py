@@ -12,9 +12,21 @@ class Base(DeclarativeBase):
     pass
 
 
+# Use async SQLite driver for async operations
+def get_database_url() -> str:
+    """Get database URL with proper async SQLite driver"""
+    url = settings.database_url
+
+    # Replace sqlite:/// with sqlite+aiosqlite:/// for async support
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+
+    return url
+
+
 # Create async engine
 engine = create_async_engine(
-    settings.database_url,
+    get_database_url(),
     echo=settings.log_level == "debug",
     future=True,
 )

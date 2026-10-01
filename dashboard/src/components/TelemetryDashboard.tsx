@@ -1,6 +1,5 @@
-import React from "react";
-import { TelemetryAggregated, TelemetryStats } from "../types";
-import { useTelemetryStats } from "../hooks";
+import { TelemetryAggregated } from "../types";
+import { useTelemetryStats } from "../hooks/useTelemetry";
 
 interface TelemetryDashboardProps {
   nodeId: string;
@@ -64,7 +63,7 @@ export default function TelemetryDashboard({ nodeId, aggregatedTelemetry }: Tele
         )}
       </div>
 
-      {isLoadingStats && (
+      {statsLoading && (
         <p>Loading telemetry statistics...</p>
       )}
     </div>

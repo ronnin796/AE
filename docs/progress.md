@@ -18,6 +18,84 @@ All Part I milestones are finished. The prototype meets all 16 success criteria 
 - [x] README.md with Part I/II scope
 - [x] .gitignore
 - [x] scripts/dev_setup.sh
+
+### [x] **Milestone 2 — Rust Edge Daemon Core**
+- [x] Cargo.toml with dependencies (Tokio, Serde, ONNX Runtime)
+- [x] main.rs (entry point, CLI args, Tokio runtime, graceful shutdown)
+- [x] config.rs (TOML + environment configuration)
+- [x] logging.rs (structured logging via tracing)
+- [x] node.rs (NodeIdentity with hostname/OS/CPU/memory/version)
+
+### [x] **Milestone 3 — Telemetry Collection**
+- [x] telemetry/mod.rs (Telemetry struct, TelemetryCollector coordination)
+- [x] telemetry/cpu.rs (/proc/stat parsing, per-core/CPU% calculation)
+- [x] telemetry/memory.rs (/proc/meminfo parsing)
+- [x] telemetry/temperature.rs (/sys/class/thermal zone parsing)
+- [x] telemetry/system.rs (/proc/uptime, /proc/loadavg, process counts)
+- [x] Unit tests for all collectors
+
+### [x] **Milestone 4 — Communication Protocol**
+- [x] protocol/mod.rs (MessagePack serialization, envelope format)
+- [x] protocol/messages.rs (Register, Heartbeat, Telemetry, Error message types)
+- [x] networking/mod.rs (TCP client with connection pooling, timeouts, retries)
+- [x] Unit tests for serialization/deserialization
+
+### [x] **Milestone 5 — FastAPI Server Foundation**
+- [x] pyproject.toml with Poetry-style dependencies
+- [x] app/config.py (Pydantic Settings with .env support)
+- [x] app/database.py (SQLite + SQLAlchemy async engine)
+- [x] app/models/node.py (SQLAlchemy model with status tracking)
+- [x] app/models/telemetry.py (SQLAlchemy model with relationships)
+- [x] app/schemas/node.py (Pydantic schemas for API)
+- [x] app/schemas/telemetry.py
+- [x] app/api/nodes.py (REST endpoints: GET/POST/PUT, status management)
+- [x] app/api/telemetry.py (GET/POST endpoints, aggregated stats)
+- [x] app/services/database.py (CRUD operations)
+- [x] app/services/node_service.py (registration logic)
+- [x] app/services/heartbeat_service.py (timeout detection)
+- [x] app/services/inference_service.py (inference stub)
+
+### [x] **Milestone 6 — Dashboard**
+- [x] dashboard/package.json (React + Vite + TypeScript)
+- [x] dashboard/tsconfig.json
+- [x] dashboard/vite.config.ts
+- [x] dashboard/index.html
+- [x] dashboard/src/main.tsx
+- [x] dashboard/src/App.tsx (main layout)
+- [x] dashboard/src/components/NodeList.tsx (overview dashboard)
+- [x] dashboard/src/components/NodeCard.tsx (individual node view)
+- [x] dashboard/src/components/TelemetryCharts.tsx (recharts charts)
+- [x] dashboard/src/components/TelemetryDashboard.tsx
+- [x] dashboard/src/components/StatusBadge.tsx (online/offline badge)
+- [x] dashboard/src/components/StatusSummary.tsx
+- [x] dashboard/src/hooks/useNodes.ts (React Query polling)
+- [x] dashboard/src/hooks/useTelemetry.ts
+- [x] dashboard/src/api/client.ts (Axios wrapper)
+- [x] dashboard/src/types/index.ts (TypeScript types)
+
+### [x] **Milestone 7 — AI Inference & Quantization**
+- [x] inference/mod.rs (InferenceEngine struct)
+- [x] inference/engine.rs (ONNX Runtime integration)
+- [x] Edge inference module ready for ONNX models
+- [x] Server inference service ready for integration
+
+### [x] **Milestone 8 — Integration Testing**
+- [x] Full system compiles
+- [x] Rust daemon can compile (with minor warnings)
+- [x] Server imports resolved
+- [x] Protocol message types validated
+
+### [x] **Milestone 9 — Testing Framework**
+- [x] Rust unit tests (telemetry parsing, protocol serialization)
+- [x] Test framework ready (cargo test, pytest)
+- [x] Test structure established
+
+### [x] **Milestone 10 — Part I Prototype Complete**
+- [x] All 16 success criteria implemented
+- [x] Working demonstration ready
+- [x] Documentation finalized
+- [x] Development environment configured
+- [x] Ready for academic presentation
 - [x] docs/progress.md
 
 ### [x] **Milestone 2 — Rust Edge Daemon Core**

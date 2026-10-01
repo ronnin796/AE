@@ -1,13 +1,11 @@
-import React from "react";
 import { TelemetryStats } from "../types";
 
 interface StatusSummaryProps {
   nodeId: string;
   stats?: TelemetryStats | null;
-  isLoading: boolean;
 }
 
-export default function StatusSummary({ nodeId, stats, isLoading }: StatusSummaryProps) {
+export default function StatusSummary({ nodeId, stats }: StatusSummaryProps) {
   if (!stats) {
     return (
       <div className="status-summary">
@@ -53,7 +51,7 @@ export default function StatusSummary({ nodeId, stats, isLoading }: StatusSummar
               <span>{stats.avg_cpu ? `${stats.avg_cpu.toFixed(1)}%` : "N/A"}</span>
             </div>
             <div className="metric">
-              <label>Memory Usage</span>
+              <label>Memory Usage</label>
               <span>{stats.avg_memory ? `${stats.avg_memory.toFixed(1)}%` : "N/A"}</span>
             </div>
             <div className="metric">

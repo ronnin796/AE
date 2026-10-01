@@ -1,128 +1,223 @@
-"""Model quantization utilities"""
-import onnx
-import onnxruntime as ort
-from onnxruntime.quantization import quantization
-from pathlib import Path
-import numpy as np
+#!/usr/bin/env python3
+"""Quantize ONNX models to INT8 for AetherEdge
+
+Part I: Static quantization pipeline with calibration
+"""
+
 import logging
-from typing import Optional, Tuple
+import sys
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple, List
+import json
+import numpy as np
+
+# Add parent directory to path for utils import
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils import setup_logging, save_metadata, load_metadata, format_size
 
 logger = logging.getLogger(__name__)
 
-def quantize_model(
-    model_fp32: Path,
-    model_int8: Path,
-    calibration_data: Optional[np.ndarray] = None,
-    per_channel: bool = False,
-    reduce_range: bool = False,
-    weight_type: quantization.QuantType = quantization.QuantType.QInt8,
-) -> Tuple[Path, dict]:
-    """
-    Quantize a FP32 ONNX model to INT8
+
+def create_calibration_data(num_samples: int = 100, input_shape: Tuple[int, ...] = (1, 784)) -> List[np.ndarray]:
+    """Generate synthetic calibration data for quantization.
 
     Args:
-        model_fp32: Path to FP32 ONNX model
-        model_int8: Path for output INT8 model
-        calibration_data: Data for calibration (if None, uses min/max)
-        per_channel: Whether to use per-channel quantization
-        reduce_range: Whether to reduce quantization range
-        weight_type: Quantization type for weights
+        num_samples: Number of calibration samples
+        input_shape: Shape of input data
 
     Returns:
-        Tuple of (Path to quantized model, quantization stats)
+        List of numpy arrays for calibration
     """
-    # Ensure output directory exists
-    model_int8.parent.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Generating {num_samples} calibration samples...")
+    calibration_data = []
+    for _ in range(num_samples):
+        # Generate random data normalized to [0, 1] range
+        sample = np.random.rand(*input_shape).astype(np.float32)
+        calibration_data.append(sample)
+    return calibration_data
 
-    # Create calibration data reader if needed
-    if calibration_data is not None:
-        # In a real implementation, we'd use a proper calibration data reader
-        # For demo, we'll just use min/max calibration
-        pass
 
-    # Quantize the model
-    quant_stats = quantization.quantize_static(
-        model_input=str(model_fp32),
-        model_output=str(model_int8),
-        calibration_data_reader=None,  # For demo - in reality would use actual data
-        quant_format=quantization.QuantFormat.QOperator,
-        per_channel=per_channel,
+def quantize_model_static(
+    model_path: Path,
+    calibration_data: List[np.ndarray],
+    output_path: Optional[Path] = None,
+    per_channel: bool = False,
+    reduce_range: bool = False
+) -> Path:
+    """Quantize ONNX model using static quantization.
+
+    Args:
+        model_path: Path to FP32 ONNX model
+        calibration_data: List of calibration data samples
+        output_path: Output path for INT8 model (defaults to model_path with '_int8' suffix)
+        per_channel: Whether to use per-channel quantization
+        reduce_range: Whether to reduce quantization range
+
+    Returns:
+        Path to quantized ONNX model
+    """
+    try:
+        import onnx
+        from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantFormat, QuantType
+    except ImportError as e:
+        logger.error(f"Required packages not available: {e}")
+        logger.error("Please install: pip install onnx onnxruntime onnxruntime-tools")
+        raise
+
+    if output_path is None:
+        output_path = model_path.parent / f"{model_path.stem}_int8{model_path.suffix}"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    class SimpleCalibrationReader(CalibrationDataReader):
+        def __init__(self, data_list: List[np.ndarray]):
+            self.data_list = data_list
+            self.iterator = iter(data_list)
+
+        def get_next(self):
+            try:
+                return next(self.iterator)
+            except StopIteration:
+                return None
+
+        def rewind(self):
+            self.iterator = iter(self.data_list)
+
+    logger.info("Starting static quantization...")
+    logger.info(f"Input model: {model_path} ({format_size(model_path.stat().st_size)})")
+    logger.info(f"Output model: {output_path}")
+
+    calibration_reader = SimpleCalibrationReader(calibration_data)
+
+    quantize_static(
+        model_input=str(model_path),
+        model_output=str(output_path),
+        calibration_data_reader=calibration_reader,
+        quant_format=QuantFormat.QOperator if per_channel else QuantFormat.QOperator,
+        weight_type=QuantType.QInt8,
         reduce_range=reduce_range,
-        weight_type=weight_type,
-        activation_type=quantization.QuantType.QUInt8,
-        nodes_to_exclude=[],  # Exclude problematic nodes if needed
-        nodes_to_include=[],  # Include specific nodes if needed
+        per_channel=per_channel
     )
 
-    logger.info(f"Quantized model saved to: {model_int8}")
-    logger.info(f"Quantization stats: {quant_stats}")
+    logger.info(f"Quantization complete! Output size: {format_size(output_path.stat().st_size)}")
 
-    return model_int8, quant_stats
+    # Save quantization metadata
+    metadata = load_metadata(model_path.parent) or {}
+    metadata.update({
+        "quantization": {
+            "method": "static",
+            "per_channel": per_channel,
+            "reduce_range": reduce_range,
+            "calibration_samples": len(calibration_data)
+        },
+        "quantized_model_size_bytes": output_path.stat().st_size,
+        "original_model_size_bytes": model_path.stat().st_size,
+        "compression_ratio": model_path.stat().st_size / output_path.stat().st_size if output_path.stat().st_size > 0 else 0
+    })
+    save_metadata(output_path.parent, metadata)
 
-def create_calibration_data(num_samples: int = 100,
-                          input_shape: tuple = (1, 3, 224, 224)) -> np.ndarray:
-    """Create dummy calibration data for demonstration"""
-    # In reality, this would be real data from your dataset
-    return np.random.randn(num_samples, *input_shape[1:]).astype(np.float32)
+    return output_path
 
-def export_example_model() -> Path:
-    """Create and export a simple example model for demonstration"""
-    import torch
-    import torch.nn as nn
 
-    # Create a simple CNN-like model
-    class SimpleModel(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
-            self.relu = nn.ReLU()
-            self.pool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(16, 10)
+def quantize_model_dynamic(
+    model_path: Path,
+    output_path: Optional[Path] = None,
+    weight_type: str = "QInt8"
+) -> Path:
+    """Quantize ONNX model using dynamic quantization.
 
-        def forward(self, x):
-            x = self.relu(self.conv1(x))
-            x = self.pool(x)
-            x = x.view(x.size(0), -1)
-            x = self.fc(x)
-            return x
+    Args:
+        model_path: Path to FP32 ONNX model
+        output_path: Output path for INT8 model (defaults to model_path with '_int8' suffix)
+        weight_type: Weight quantization type (QInt8, QUInt8)
 
-    model = SimpleModel()
+    Returns:
+        Path to quantized ONNX model
+    """
+    try:
+        import onnx
+        from onnxruntime.quantization import quantize_dynamic, QuantType
+    except ImportError as e:
+        logger.error(f"Required packages not available: {e}")
+        logger.error("Please install: pip install onnx onnxruntime onnxruntime-tools")
+        raise
 
-    # Export to ONNX
-    dummy_input = torch.randn(1, 3, 224, 224)
-    onnx_path = Path("models/example-model/model.onnx")
-    onnx_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path is None:
+        output_path = model_path.parent / f"{model_path.stem}_int8{model_path.suffix}"
 
-    torch.onnx.export(
-        model,
-        dummy_input,
-        onnx_path,
-        export_params=True,
-        opset_version=13,
-        do_constant_folding=True,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={
-            "input": {0: "batch_size"},
-            "output": {0: "batch_size"}
-        }
-    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create metadata
-    metadata = {
-        "model_name": "example-model",
-        "framework": "pytorch",
-        "format": "onnx",
-        "version": "1.0",
-        "input_shape": list(dummy_input.shape),
-        "output_shape": [1, 10],
-        "description": "Simple CNN model for demonstration",
-        "created_by": "AetherEdge ML Tooling"
+    logger.info("Starting dynamic quantization...")
+    logger.info(f"Input model: {model_path} ({format_size(model_path.stat().st_size)})")
+    logger.info(f"Output model: {output_path}")
+
+    weight_type_map = {
+        "QInt8": QuantType.QInt8,
+        "QUInt8": QuantType.QUInt8
     }
 
-    metadata_path = Path("models/example-model/metadata.json")
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
+    quantize_dynamic(
+        model_input=str(model_path),
+        model_output=str(output_path),
+        weight_type=weight_type_map.get(weight_type, QuantType.QInt8)
+    )
 
-    return onnx_path
+    logger.info(f"Dynamic quantization complete! Output size: {format_size(output_path.stat().st_size)}")
+
+    # Save quantization metadata
+    metadata = load_metadata(model_path.parent) or {}
+    metadata.update({
+        "quantization": {
+            "method": "dynamic",
+            "weight_type": weight_type
+        },
+        "quantized_model_size_bytes": output_path.stat().st_size,
+        "original_model_size_bytes": model_path.stat().st_size,
+        "compression_ratio": model_path.stat().st_size / output_path.stat().st_size if output_path.stat().st_size > 0 else 0
+    })
+    save_metadata(output_path.parent, metadata)
+
+    return output_path
+
+
+def prepare_quantized_model(
+    model_dir: Path = Path("models/example-model"),
+    use_static: bool = True,
+    num_calibration_samples: int = 100
+) -> Tuple[Path, Path]:
+    """Prepare both FP32 and INT8 versions of a model.
+
+    Args:
+        model_dir: Directory containing the FP32 model
+        use_static: Whether to use static quantization (True) or dynamic (False)
+        num_calibration_samples: Number of calibration samples for static quantization
+
+    Returns:
+        Tuple of (fp32_path, int8_path)
+    """
+    model_dir = model_dir.resolve()
+    fp32_path = model_dir / "model.onnx"
+
+    if not fp32_path.exists():
+        logger.info("FP32 model not found. Creating demo model...")
+        from export import prepare_model
+        fp32_path = prepare_model(model_dir)
+
+    if use_static:
+        logger.info("Creating calibration data for static quantization...")
+        calibration_data = create_calibration_data(
+            num_samples=num_calibration_samples,
+            input_shape=(1, 784)  # From our demo model
+        )
+        int8_path = quantize_model_static(fp32_path, calibration_data)
+    else:
+        int8_path = quantize_model_dynamic(fp32_path)
+
+    return fp32_path, int8_path
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    fp32_model, int8_model = prepare_quantized_model()
+    print(f"FP32 model: {fp32_model}")
+    print(f"INT8 model: {int8_model}")
