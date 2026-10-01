@@ -1,6 +1,6 @@
 """Node registration service"""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -77,12 +77,13 @@ async def mark_offline_nodes(timeout_seconds: int = 30, db: AsyncSession = None)
 
 
 async def _mark_offline_nodes_internal(timeout_seconds: int, db: AsyncSession) -> int:
-    threshold = datetime.utcnow().timestamp() - timeout_seconds
+    from datetime import timezone
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
 
     result = await db.execute(
         select(Node).where(
             Node.status == NodeStatus.ONLINE,
-            Node.last_seen < datetime.utcfromtimestamp(threshold),
+            Node.last_seen < threshold,
         )
     )
     offline_nodes = result.scalars().all()

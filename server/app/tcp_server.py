@@ -21,11 +21,14 @@ from app.schemas.node import NodeRegister
 from app.protocol import (
     PROTOCOL_VERSION, MAGIC_BYTES, MAX_MESSAGE_SIZE,
     MessageType, Envelope, Register, RegisterResponse,
-    Heartbeat, HeartbeatAck, ServerConfig as ProtocolServerConfig,
+    Heartbeat, HeartbeatAck, Telemetry as ProtocolTelemetry,
+    ServerConfig as ProtocolServerConfig,
     Error, encode_envelope, decode_envelope
 )
 
-from app.services.database import create_node, get_node_by_id
+from app.services.database import create_node, get_node_by_id, add_telemetry
+from app.schemas.telemetry import TelemetryCreate
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -149,14 +152,72 @@ class SimpleTCPServer:
             if envelope.msg_type == MessageType.REGISTER:
                 return await self.handle_register(envelope)
             elif envelope.msg_type == MessageType.HEARTBEAT:
-                return self.create_heartbeat_ack()
+                return await self.handle_heartbeat(envelope)
             elif envelope.msg_type == MessageType.TELEMETRY:
-                return self.create_telemetry_ack(envelope.sequence)
+                return await self.handle_telemetry(envelope)
             else:
                 logger.warning(f"Unknown message type: {envelope.msg_type}")
                 return self.create_error_response(envelope, 255, "Unknown message type")
         except Exception as e:
             logger.error(f"Error processing message: {e}")
+            return self.create_error_response(envelope, 500, str(e))
+
+    async def handle_heartbeat(self, envelope: Envelope) -> Optional[Envelope]:
+        """Handle heartbeat from edge node"""
+        try:
+            # Deserialize heartbeat message
+            heartbeat_data = Heartbeat.deserialize(envelope.payload)
+            logger.debug(f"Heartbeat received from node {heartbeat_data.node_id}")
+
+            # Update node last_seen in database
+            async with async_session_maker() as db:
+                node = await get_node_by_id(heartbeat_data.node_id, db)
+                if node:
+                    node.last_seen = datetime.utcnow()
+                    node.status = NodeStatus.ONLINE
+                    await db.commit()
+
+            # Create heartbeat acknowledgment
+            return self.create_heartbeat_ack()
+
+        except Exception as e:
+            logger.error(f"Error handling heartbeat: {e}")
+            return self.create_error_response(envelope, 500, str(e))
+
+    async def handle_telemetry(self, envelope: Envelope) -> Optional[Envelope]:
+        """Handle telemetry data from edge node"""
+        try:
+            # Deserialize telemetry message
+            telemetry_data = ProtocolTelemetry.deserialize(envelope.payload)
+            logger.debug(f"Telemetry received from node {telemetry_data.node_id}")
+
+            # Store telemetry in database
+            async with async_session_maker() as db:
+                telemetry_create = TelemetryCreate(
+                    node_id=telemetry_data.node_id,
+                    timestamp=telemetry_data.timestamp,
+                    cpu_usage=telemetry_data.cpu_usage,
+                    cpu_per_core=telemetry_data.cpu_per_core,
+                    memory_usage=telemetry_data.memory_usage,
+                    memory_total=telemetry_data.memory_total,
+                    memory_available=telemetry_data.memory_available,
+                    memory_used=telemetry_data.memory_used,
+                    temperature=telemetry_data.temperature,
+                    temperatures=telemetry_data.temperatures,
+                    uptime=telemetry_data.uptime,
+                    load_1=telemetry_data.load_1,
+                    load_5=telemetry_data.load_5,
+                    load_15=telemetry_data.load_15,
+                    processes_running=telemetry_data.processes_running,
+                    processes_total=telemetry_data.processes_total,
+                )
+                await add_telemetry(telemetry_create, db)
+
+            # Create telemetry acknowledgment
+            return self.create_telemetry_ack(envelope.sequence)
+
+        except Exception as e:
+            logger.error(f"Error handling telemetry: {e}")
             return self.create_error_response(envelope, 500, str(e))
 
     async def handle_register(self, envelope: Envelope) -> Optional[Envelope]:
@@ -263,6 +324,10 @@ class SimpleTCPServer:
 
     def create_telemetry_ack(self, sequence: int) -> Envelope:
         """Create telemetry acknowledgment"""
+        # For now, we use a simple acknowledgment similar to heartbeat ack
+        # but with a different message type. The protocol doesn't define
+        # a specific TelemetryAck message type, so we use HEARTBEAT_ACK
+        # with the telemetry sequence number.
         response = HeartbeatAck(
             node_id="server",
             server_time=int(datetime.utcnow().timestamp()),

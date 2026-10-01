@@ -1,12 +1,15 @@
 """Telemetry API endpoints"""
 
+import json
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime
 
 from app.database import get_db
 from app.models.telemetry import Telemetry
+from app.models.node import Node
 from app.schemas.telemetry import (
     TelemetryCreate,
     TelemetryResponse,
@@ -47,6 +50,52 @@ async def ingest_telemetry(
         )
 
 
+import json
+from app.models.node import Node
+
+
+def _telemetry_to_response(telemetry: Telemetry, node: Node = None) -> TelemetryResponse:
+    """Convert database Telemetry model to TelemetryResponse schema"""
+    # Parse JSON fields
+    cpu_per_core = None
+    if telemetry.cpu_per_core:
+        try:
+            cpu_per_core = json.loads(telemetry.cpu_per_core)
+        except (json.JSONDecodeError, TypeError):
+            cpu_per_core = None
+
+    temperatures = None
+    if telemetry.temperatures:
+        try:
+            temperatures = json.loads(telemetry.temperatures)
+        except (json.JSONDecodeError, TypeError):
+            temperatures = None
+
+    # Get node_id string from node relationship or query
+    node_id_str = node.node_id if node else str(telemetry.node_id)
+
+    return TelemetryResponse(
+        id=telemetry.id,
+        node_id=node_id_str,
+        timestamp=int(telemetry.timestamp.timestamp()),
+        cpu_usage=telemetry.cpu_usage,
+        cpu_per_core=cpu_per_core,
+        memory_usage=telemetry.memory_usage,
+        memory_total=telemetry.memory_total,
+        memory_available=telemetry.memory_available,
+        memory_used=telemetry.memory_used,
+        temperature=telemetry.temperature,
+        temperatures=temperatures,
+        uptime=telemetry.uptime,
+        load_1=telemetry.load_1,
+        load_5=telemetry.load_5,
+        load_15=telemetry.load_15,
+        processes_running=telemetry.processes_running,
+        processes_total=telemetry.processes_total,
+        created_at=telemetry.timestamp,  # Use timestamp as created_at since model doesn't have created_at
+    )
+
+
 @router.get("/", response_model=List[TelemetryResponse])
 async def list_telemetry(
     node_id: Optional[str] = Query(None, description="Filter by node ID"),
@@ -60,7 +109,13 @@ async def list_telemetry(
     List telemetry data with optional filters.
     """
     telemetry_list = await get_telemetry(node_id, start_time, end_time, limit, offset, db)
-    return [TelemetryResponse.from_orm(t) for t in telemetry_list]
+    # Fetch nodes for node_id conversion
+    nodes = {}
+    if telemetry_list:
+        node_ids = set(t.node_id for t in telemetry_list)
+        result = await db.execute(select(Node).where(Node.id.in_(node_ids)))
+        nodes = {n.id: n for n in result.scalars().all()}
+    return [_telemetry_to_response(t, nodes.get(t.node_id)) for t in telemetry_list]
 
 
 @router.get("/node/{node_id}", response_model=List[TelemetryResponse])
@@ -73,13 +128,22 @@ async def get_node_telemetry(
     """
     Get telemetry data for a specific node.
     """
+    from app.services.database import get_node_by_id
+
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+
     telemetry_list = await get_telemetry_for_node(node_id, start_time, end_time, db)
     if not telemetry_list:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No telemetry found for node {node_id}",
         )
-    return [TelemetryResponse.from_orm(t) for t in telemetry_list]
+    return [_telemetry_to_response(t, node) for t in telemetry_list]
 
 
 @router.get("/stats/{node_id}", response_model=TelemetryStats)
