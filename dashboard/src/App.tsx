@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNodes, useOnlineNodes, useOfflineNodes } from "./hooks/useNodes";
+import { useNodes, useOnlineNodes, useOfflineNodes, useNode } from "./hooks/useNodes";
 import { useAggregatedTelemetry, useTelemetryStats } from "./hooks/useTelemetry";
 
 import NavBar from "./components/NavBar";
@@ -7,6 +7,7 @@ import NodeOverview from "./components/NodeOverview";
 import NodeList from "./components/NodeList";
 import TelemetryDashboard from "./components/TelemetryDashboard";
 import StatusSummary from "./components/StatusSummary";
+import NodeDetail from "./components/NodeDetail";
 
 function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -19,6 +20,9 @@ function App() {
 
   // Fetch offline nodes
   const { data: offlineNodes = [] } = useOfflineNodes();
+
+  // Fetch selected node details
+  const { data: nodeDetail, isLoading: nodeLoading } = useNode(selectedNode || "");
 
   // Node telemetry if selected
   const { data: aggregatedTelemetry, refetch: refetchTelemetry } = useAggregatedTelemetry(
@@ -43,16 +47,17 @@ function App() {
           onlineNodes={onlineNodes}
           offlineNodes={offlineNodes}
         />
-        {selectedNode && (
+        {selectedNode ? (
           <>
+            <NodeDetail node={nodeDetail} isLoading={nodeLoading} stats={stats} />
             <StatusSummary nodeId={selectedNode} stats={stats} />
             <TelemetryDashboard
               nodeId={selectedNode}
               aggregatedTelemetry={aggregatedTelemetry}
+              stats={stats}
             />
           </>
-        )}
-        {!selectedNode && (
+        ) : (
           <NodeList
             onSelect={(nodeId: string) => setSelectedNode(nodeId)}
           />

@@ -1,0 +1,150 @@
+import { Node, TelemetryStats } from "../types";
+
+interface NodeDetailProps {
+  node: Node | undefined;
+  isLoading: boolean;
+  stats?: TelemetryStats | null;
+}
+
+const statusColor = {
+  online: "bg-green-500",
+  offline: "bg-red-500",
+  degraded: "bg-yellow-500",
+  maintenance: "bg-blue-500",
+};
+
+const statusDotClass = {
+  online: "online",
+  offline: "offline",
+  degraded: "degraded",
+  maintenance: "maintenance",
+};
+
+const formatBytes = (bytes?: number) => {
+  if (!bytes) return "Not available";
+  const gb = bytes / 1024 / 1024 / 1024;
+  return `${gb.toFixed(2)} GB`;
+};
+
+const formatTimeAgo = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return `${diffSecs}s ago`;
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+};
+
+export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) {
+  if (isLoading) {
+    return (
+      <div className="node-detail">
+        <div className="loading">Loading node details...</div>
+      </div>
+    );
+  }
+
+  if (!node) {
+    return (
+      <div className="node-detail">
+        <div className="empty-state">
+          <h3>No node selected</h3>
+          <p>Select a node from the list to view details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const statusClass = statusColor[node.status] || "bg-gray-500";
+
+  return (
+    <div className="node-detail">
+      <div className="detail-header">
+        <div className="detail-header-main">
+          <h2>{node.hostname}</h2>
+          <span className={`status-badge ${statusClass}`}>
+            {node.status.toUpperCase()}
+          </span>
+        </div>
+        <div className="detail-header-meta">
+          <span className="node-id">ID: {node.node_id}</span>
+          <span className="last-seen">
+            Last heartbeat: {formatTimeAgo(node.last_seen)}
+          </span>
+        </div>
+      </div>
+
+      <div className="detail-sections">
+        <section className="detail-section">
+          <h3>System Information</h3>
+          <dl className="detail-grid">
+            <div><dt>Hostname</dt><dd>{node.hostname}</dd></div>
+            <div><dt>Operating System</dt><dd>{node.os} {node.os_version || ""}</dd></div>
+            <div><dt>Kernel Version</dt><dd>{node.kernel_version || "Not available"}</dd></div>
+            <div><dt>Architecture</dt><dd>{node.arch || "Not available"}</dd></div>
+            <div><dt>CPU</dt><dd>{node.cpu_brand || "Not available"} ({node.cpu_cores || "?"} cores)</dd></div>
+            <div><dt>Total Memory</dt><dd>{formatBytes(node.total_memory)}</dd></div>
+            <div><dt>AetherEdge Version</dt><dd>{node.version || "Not available"}</dd></div>
+          </dl>
+        </section>
+
+        <section className="detail-section">
+          <h3>Communication</h3>
+          <dl className="detail-grid">
+            <div>
+              <dt>Connection Status</dt>
+              <dd>
+                <span className="status-indicator">
+                  <span className={`status-dot ${statusDotClass[node.status] || "offline"}`}></span>
+                  <span className="status-text">{node.status.toUpperCase()}</span>
+                </span>
+              </dd>
+            </div>
+            <div><dt>Last Heartbeat</dt><dd>{new Date(node.last_seen).toLocaleString()} ({formatTimeAgo(node.last_seen)})</dd></div>
+            <div><dt>Registered</dt><dd>{new Date(node.created_at).toLocaleString()}</dd></div>
+            <div><dt>Last Updated</dt><dd>{new Date(node.updated_at).toLocaleString()}</dd></div>
+          </dl>
+        </section>
+
+        <section className="detail-section">
+          <h3>Telemetry</h3>
+          {stats && stats.count > 0 ? (
+            <dl className="detail-grid">
+              <div><dt>Data Points Collected</dt><dd>{stats.count}</dd></div>
+              <div><dt>Avg CPU Usage</dt><dd>{stats.avg_cpu ? `${stats.avg_cpu.toFixed(1)}%` : "Not available"}</dd></div>
+              <div><dt>Max CPU Usage</dt><dd>{stats.max_cpu ? `${stats.max_cpu.toFixed(1)}%` : "Not available"}</dd></div>
+              <div><dt>Avg Memory Usage</dt><dd>{stats.avg_memory ? `${stats.avg_memory.toFixed(1)}%` : "Not available"}</dd></div>
+              <div><dt>Max Memory Usage</dt><dd>{stats.max_memory ? `${stats.max_memory.toFixed(1)}%` : "Not available"}</dd></div>
+              <div><dt>Avg Temperature</dt><dd>{stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "Not available"}</dd></div>
+              <div><dt>Max Temperature</dt><dd>{stats.max_temperature ? `${stats.max_temperature.toFixed(1)}°C` : "Not available"}</dd></div>
+              <div><dt>Latest Reading</dt><dd>{stats.latest_timestamp ? new Date(stats.latest_timestamp * 1000).toLocaleString() : "Not available"}</dd></div>
+            </dl>
+          ) : (
+            <div className="empty-state">
+              <h3>No Telemetry Data</h3>
+              <p>Telemetry not available yet.</p>
+              <p className="empty-hint">This feature will be expanded in Part II.</p>
+            </div>
+          )}
+        </section>
+
+        {node.capabilities && node.capabilities.length > 0 && (
+          <section className="detail-section">
+            <h3>Capabilities</h3>
+            <ul className="capabilities-list">
+              {node.capabilities.map((cap) => (
+                <li key={cap}>{cap}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
