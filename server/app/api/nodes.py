@@ -1,8 +1,8 @@
 """Node-related API endpoints"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from app.database import get_db
@@ -28,6 +28,7 @@ from app.services.heartbeat_service import (
     get_online_nodes,
     get_offline_nodes,
 )
+from app.tcp_server import send_command_to_node
 
 router = APIRouter()
 
@@ -133,4 +134,71 @@ async def mark_offline_nodes_endpoint(
     return {
         "marked_offline": count,
         "message": f"Marked {count} nodes as OFFLINE",
+    }
+
+
+@router.post("/{node_id}/command", response_model=dict)
+async def send_node_command(
+    node_id: str,
+    command: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Send a command to a node via TCP connection.
+    Supported commands: shutdown, reboot, update_telemetry_interval, update_heartbeat_interval
+    """
+    from app.services.database import get_node_by_id
+    
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+    
+    cmd_type = command.get("command")
+    params = command.get("params", {})
+    
+    if cmd_type not in ["shutdown", "reboot", "update_telemetry_interval", "update_heartbeat_interval"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown command: {cmd_type}",
+        )
+    
+    # Send command via TCP (background task)
+    background_tasks.add_task(send_command_to_node, node_id, cmd_type, params)
+    
+    return {
+        "success": True,
+        "node_id": node_id,
+        "command": cmd_type,
+        "message": f"Command {cmd_type} queued for node {node_id}",
+    }
+
+
+@router.post("/{node_id}/shutdown", response_model=dict)
+async def shutdown_node(
+    node_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Send shutdown command to a node.
+    """
+    from app.services.database import get_node_by_id
+    
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+    
+    background_tasks.add_task(send_command_to_node, node_id, "shutdown", {})
+    
+    return {
+        "success": True,
+        "node_id": node_id,
+        "message": f"Shutdown command sent to node {node_id}",
     }

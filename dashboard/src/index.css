@@ -619,6 +619,133 @@ body {
   color: var(--text-secondary);
 }
 
+.detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.btn-danger {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.action-btn.btn-danger:hover:not(:disabled) {
+  background: var(--accent-red);
+  color: white;
+}
+
+.action-btn.btn-warning {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.action-btn.btn-warning:hover:not(:disabled) {
+  background: var(--accent-yellow);
+  color: #000;
+}
+
+.action-btn.btn-info {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.action-btn.btn-info:hover:not(:disabled) {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.action-btn.btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-result {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-result.success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+}
+
+.action-result.error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--accent-red);
+  color: var(--accent-red);
+}
+
+.commands-help {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.cmd-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background: var(--accent-purple);
+  color: white;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: monospace;
+  min-width: 180px;
+}
+
+.monospace {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
 /* Dark theme (default) */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -650,7 +777,9 @@ body {
   .status-summary,
   .telemetry-dashboard,
   .node-list-container,
-  .telemetry-charts {
+  .telemetry-charts,
+  .node-detail,
+  .detail-section {
     background: var(--bg-secondary);
   }
 

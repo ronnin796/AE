@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Node, TelemetryStats } from "../types";
+import { shutdownNode, sendNodeCommand } from "../api/client";
 
 interface NodeDetailProps {
-  node: Node | undefined;
-  isLoading: boolean;
+  node: Node;
   stats?: TelemetryStats | null;
 }
 
@@ -41,27 +42,33 @@ const formatTimeAgo = (dateString: string) => {
   return `${diffDays}d ago`;
 };
 
-export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) {
-  if (isLoading) {
-    return (
-      <div className="node-detail">
-        <div className="loading">Loading node details...</div>
-      </div>
-    );
-  }
-
-  if (!node) {
-    return (
-      <div className="node-detail">
-        <div className="empty-state">
-          <h3>No node selected</h3>
-          <p>Select a node from the list to view details.</p>
-        </div>
-      </div>
-    );
-  }
-
+export default function NodeDetail({ node, stats }: NodeDetailProps) {
   const statusClass = statusColor[node.status] || "bg-gray-500";
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleAction = async (command: string, params: Record<string, any> = {}) => {
+    setActionLoading(command);
+    setActionResult(null);
+    try {
+      let result;
+      if (command === "shutdown") {
+        result = await shutdownNode(node.node_id);
+      } else {
+        result = await sendNodeCommand(node.node_id, command, params);
+      }
+      setActionResult({ success: true, message: result.message || `Command ${command} sent successfully` });
+    } catch (error: any) {
+      setActionResult({ 
+        success: false, 
+        message: error.response?.data?.detail || error.message || "Failed to send command" 
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const canControl = node.status === "online";
 
   return (
     <div className="node-detail">
@@ -73,12 +80,50 @@ export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) 
           </span>
         </div>
         <div className="detail-header-meta">
-          <span className="node-id">ID: {node.node_id}</span>
+          <span className="node-id">{node.node_id}</span>
           <span className="last-seen">
             Last heartbeat: {formatTimeAgo(node.last_seen)}
           </span>
         </div>
       </div>
+
+      {/* Action Buttons */}
+      <div className="detail-actions">
+        <button 
+          className={`action-btn ${canControl ? "btn-danger" : "btn-disabled"}`}
+          onClick={() => handleAction("shutdown")}
+          disabled={!canControl || actionLoading === "shutdown"}
+        >
+          {actionLoading === "shutdown" ? "Sending..." : "⏻ Shutdown Node"}
+        </button>
+        <button 
+          className={`action-btn ${canControl ? "btn-warning" : "btn-disabled"}`}
+          onClick={() => handleAction("reboot")}
+          disabled={!canControl || actionLoading === "reboot"}
+        >
+          {actionLoading === "reboot" ? "Sending..." : "⟳ Reboot Node"}
+        </button>
+        <button 
+          className={`action-btn ${canControl ? "btn-info" : "btn-disabled"}`}
+          onClick={() => handleAction("update_telemetry_interval", { interval: 5 })}
+          disabled={!canControl || actionLoading === "update_telemetry_interval"}
+        >
+          {actionLoading === "update_telemetry_interval" ? "Sending..." : "📊 Telemetry: 5s"}
+        </button>
+        <button 
+          className={`action-btn ${canControl ? "btn-info" : "btn-disabled"}`}
+          onClick={() => handleAction("update_heartbeat_interval", { interval: 30 })}
+          disabled={!canControl || actionLoading === "update_heartbeat_interval"}
+        >
+          {actionLoading === "update_heartbeat_interval" ? "Sending..." : "💓 Heartbeat: 30s"}
+        </button>
+      </div>
+
+      {actionResult && (
+        <div className={`action-result ${actionResult.success ? "success" : "error"}`}>
+          {actionResult.message}
+        </div>
+      )}
 
       <div className="detail-sections">
         <section className="detail-section">
@@ -91,6 +136,8 @@ export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) 
             <div><dt>CPU</dt><dd>{node.cpu_brand || "Not available"} ({node.cpu_cores || "?"} cores)</dd></div>
             <div><dt>Total Memory</dt><dd>{formatBytes(node.total_memory)}</dd></div>
             <div><dt>AetherEdge Version</dt><dd>{node.version || "Not available"}</dd></div>
+            <div><dt>Node ID</dt><dd className="monospace">{node.node_id}</dd></div>
+            <div><dt>Database ID</dt><dd>#{node.id}</dd></div>
           </dl>
         </section>
 
@@ -129,7 +176,7 @@ export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) 
             <div className="empty-state">
               <h3>No Telemetry Data</h3>
               <p>Telemetry not available yet.</p>
-              <p className="empty-hint">This feature will be expanded in Part II.</p>
+              <p className="empty-hint">Node must send telemetry data first. This will be expanded in Part II.</p>
             </div>
           )}
         </section>
@@ -144,6 +191,28 @@ export default function NodeDetail({ node, isLoading, stats }: NodeDetailProps) 
             </ul>
           </section>
         )}
+
+        <section className="detail-section">
+          <h3>Available Commands</h3>
+          <div className="commands-help">
+            <div className="command-item">
+              <span className="cmd-badge">shutdown</span>
+              <span>Gracefully stops the edge node process</span>
+            </div>
+            <div className="command-item">
+              <span className="cmd-badge">reboot</span>
+              <span>Requests node to reboot (requires node support)</span>
+            </div>
+            <div className="command-item">
+              <span className="cmd-badge">update_telemetry_interval</span>
+              <span>Changes telemetry collection interval (seconds)</span>
+            </div>
+            <div className="command-item">
+              <span className="cmd-badge">update_heartbeat_interval</span>
+              <span>Changes heartbeat interval (seconds)</span>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

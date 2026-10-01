@@ -23,7 +23,7 @@ from app.protocol import (
     MessageType, Envelope, Register, RegisterResponse,
     Heartbeat, HeartbeatAck, Telemetry as ProtocolTelemetry,
     ServerConfig as ProtocolServerConfig,
-    Error, encode_envelope, decode_envelope
+    Error, ServerCommand, encode_envelope, decode_envelope
 )
 
 from app.services.database import create_node, get_node_by_id, add_telemetry
@@ -66,6 +66,7 @@ class SimpleTCPServer:
         client_addr = writer.get_extra_info('peername')
         logger.info(f"New connection from {client_addr}")
 
+        node_id = None
         try:
             # Start heartbeat task
             hb_task = asyncio.create_task(self.send_heartbeat_periodically(writer))
@@ -81,12 +82,24 @@ class SimpleTCPServer:
                 response = await self.process_message(envelope)
                 if response:
                     await self.write_message(writer, response)
+                
+                # Track node_id from register message
+                if envelope.msg_type == MessageType.REGISTER and node_id is None:
+                    try:
+                        register_data = Register.deserialize(envelope.payload)
+                        node_id = register_data.node_id
+                        _connected_clients[node_id] = writer
+                        logger.info(f"Registered client {node_id} for command sending")
+                    except Exception as e:
+                        logger.error(f"Failed to track node_id: {e}")
 
         except asyncio.IncompleteReadError:
             logger.info(f"Client {client_addr} disconnected")
         except Exception as e:
             logger.error(f"Error handling client {client_addr}: {e}")
         finally:
+            if node_id and node_id in _connected_clients:
+                del _connected_clients[node_id]
             hb_task.cancel()
             try:
                 await hb_task
@@ -304,13 +317,37 @@ class SimpleTCPServer:
             logger.error(f"Error handling registration: {e}")
             return self.create_error_response(envelope, 500, str(e))
 
-    def create_heartbeat_ack(self) -> Envelope:
-        """Create heartbeat acknowledgment"""
+    def create_heartbeat_ack(self, commands: List[str] = None) -> Envelope:
+        """Create heartbeat acknowledgment with optional commands"""
         response = HeartbeatAck(
             node_id="server",
             server_time=int(datetime.utcnow().timestamp()),
             next_heartbeat_interval=10,
-            commands=[],
+            commands=commands or [],
+        )
+
+        payload = response.serialize()
+        return Envelope(
+            version=PROTOCOL_VERSION,
+            msg_type=MessageType.HEARTBEAT_ACK,
+            sequence=0,
+            timestamp=int(datetime.utcnow().timestamp()),
+            payload=payload,
+        )
+
+    def create_heartbeat_ack_with_command(self, command: str, params: Dict[str, Any] = None) -> Envelope:
+        """Create heartbeat acknowledgment with a server command"""
+        server_command = ServerCommand(
+            command=command,
+            params=params or {},
+        )
+        command_payload = server_command.serialize()
+        
+        response = HeartbeatAck(
+            node_id="server",
+            server_time=int(datetime.utcnow().timestamp()),
+            next_heartbeat_interval=10,
+            commands=[command_payload.decode('utf-8') if isinstance(command_payload, bytes) else str(command_payload)],
         )
 
         payload = response.serialize()
@@ -369,6 +406,47 @@ async def start_tcp_server():
         port=settings.port + 1  # Use port+1 to avoid conflict with HTTP
     )
     await server.start()
+
+
+# Global reference to track connected clients for command sending
+_connected_clients: Dict[str, asyncio.StreamWriter] = {}
+
+
+async def send_command_to_node(node_id: str, command: str, params: Dict[str, Any] = None) -> bool:
+    """
+    Send a command to a connected node via TCP.
+    Returns True if command was sent, False if node not connected.
+    """
+    writer = _connected_clients.get(node_id)
+    if not writer:
+        logger.warning(f"Node {node_id} not connected via TCP, cannot send command")
+        return False
+    
+    try:
+        # Create command payload
+        server_command = ServerCommand(
+            command=command,
+            params=params or {},
+        )
+        command_payload = server_command.serialize()
+        
+        # Create envelope with command in heartbeat ACK
+        envelope = Envelope(
+            version=PROTOCOL_VERSION,
+            msg_type=MessageType.HEARTBEAT_ACK,
+            sequence=0,
+            timestamp=int(datetime.utcnow().timestamp()),
+            payload=command_payload,
+        )
+        
+        data = encode_envelope(envelope)
+        writer.write(data)
+        await writer.drain()
+        logger.info(f"Sent command '{command}' to node {node_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send command to node {node_id}: {e}")
+        return False
 
 
 if __name__ == "__main__":

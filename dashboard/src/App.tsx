@@ -47,9 +47,9 @@ function App() {
           onlineNodes={onlineNodes}
           offlineNodes={offlineNodes}
         />
-        {selectedNode ? (
+        {selectedNode && nodeDetail && !nodeLoading ? (
           <>
-            <NodeDetail node={nodeDetail} isLoading={nodeLoading} stats={stats} />
+            <NodeDetail node={nodeDetail} stats={stats} />
             <StatusSummary nodeId={selectedNode} stats={stats} />
             <TelemetryDashboard
               nodeId={selectedNode}
@@ -57,6 +57,8 @@ function App() {
               stats={stats}
             />
           </>
+        ) : selectedNode && nodeLoading ? (
+          <div className="loading-detail">Loading node details...</div>
         ) : (
           <NodeList
             onSelect={(nodeId: string) => setSelectedNode(nodeId)}

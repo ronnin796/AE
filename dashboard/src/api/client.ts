@@ -50,3 +50,13 @@ export async function getTelemetryStats(nodeId: string) {
   const response = await api.get(`/telemetry/stats/${nodeId}`);
   return response.data;
 }
+
+export async function sendNodeCommand(nodeId: string, command: string, params: Record<string, any> = {}) {
+  const response = await api.post(`/nodes/${nodeId}/command`, { command, params });
+  return response.data;
+}
+
+export async function shutdownNode(nodeId: string) {
+  const response = await api.post(`/nodes/${nodeId}/shutdown`);
+  return response.data;
+}

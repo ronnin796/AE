@@ -240,6 +240,27 @@ class HeartbeatAck:
 
 
 @dataclass
+class ServerCommand:
+    """Server command sent to node via heartbeat ACK"""
+    command: str  # 'shutdown', 'reboot', 'update_telemetry_interval', 'update_heartbeat_interval'
+    params: Dict[str, Any] = field(default_factory=dict)
+
+    def serialize(self) -> bytes:
+        return msgpack.packb({
+            'command': self.command,
+            'params': self.params,
+        })
+
+    @classmethod
+    def deserialize(cls, payload: bytes) -> 'ServerCommand':
+        data = msgpack.unpackb(payload, raw=False)
+        return cls(
+            command=_get(data, 'command', ''),
+            params=_get(data, 'params') or {},
+        )
+
+
+@dataclass
 class Telemetry:
     """Telemetry message (edge -> server)"""
     node_id: str
