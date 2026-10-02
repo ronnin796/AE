@@ -69,14 +69,13 @@ class SimpleTCPServer:
 
         node_id = None
         try:
-            # Start heartbeat task
-            hb_task = asyncio.create_task(self.send_heartbeat_periodically(writer))
-
             # Handle messages
             while self.running:
                 # Read message using the new read_message method
+                logger.debug(f"[TCP] Waiting for message from {client_addr}")
                 envelope = await self.read_message(reader)
                 if envelope is None:
+                    logger.info(f"[TCP] No envelope received from {client_addr}, closing connection")
                     break
 
                 # Log received message type
@@ -102,30 +101,15 @@ class SimpleTCPServer:
             logger.info(f"[TCP] Client {client_addr} disconnected")
         except Exception as e:
             logger.error(f"[TCP] Error handling client {client_addr}: {e}")
+            import traceback
+            logger.error(f"[TCP] Traceback: {traceback.format_exc()}")
         finally:
             if node_id and node_id in _connected_clients:
                 del _connected_clients[node_id]
                 logger.info(f"[TCP] Unregistered client {node_id}")
-            hb_task.cancel()
-            try:
-                await hb_task
-            except asyncio.CancelledError:
-                pass
             writer.close()
             await writer.wait_closed()
             logger.info(f"[TCP] Connection closed for {client_addr}")
-
-    async def send_heartbeat_periodically(self, writer: asyncio.StreamWriter):
-        """Send periodic heartbeat acknowledgment to client"""
-        while self.running:
-            await asyncio.sleep(30)  # Send every 30 seconds
-            try:
-                # Create heartbeat acknowledgment
-                response = self.create_heartbeat_ack()
-                await self.write_message(writer, response)
-            except Exception as e:
-                logger.error(f"Failed to send heartbeat: {e}")
-                break
 
     async def read_message(self, reader: asyncio.StreamReader) -> Optional[Envelope]:
         """Read and decode a message from the stream"""
@@ -197,8 +181,8 @@ class SimpleTCPServer:
                     await db.commit()
                     logger.info(f"[TCP] Node {heartbeat_data.node_id} status updated to ONLINE")
 
-            # Create heartbeat acknowledgment
-            return self.create_heartbeat_ack()
+            # Create heartbeat acknowledgment with matching sequence number
+            return self.create_heartbeat_ack(envelope.sequence)
 
         except Exception as e:
             logger.error(f"[TCP] Error handling heartbeat: {e}")
@@ -209,7 +193,7 @@ class SimpleTCPServer:
         try:
             # Deserialize telemetry message
             telemetry_data = ProtocolTelemetry.deserialize(envelope.payload)
-            logger.info(f"[TCP] Telemetry received: node_id={telemetry_data.node_id}, cpu={telemetry_data.cpu_usage}, mem={telemetry_data.memory_usage}, temp={telemetry_data.temperature}, load={telemetry_data.load_1}")
+            logger.info(f"[TCP] Telemetry received: node_id={telemetry_data.node_id}, cpu={telemetry_data.cpu_usage}, mem={telemetry_data.memory_usage}, temp={telemetry_data.temperature}, load={telemetry_data.load_1}, ts={telemetry_data.timestamp}")
 
             # Store telemetry in database
             async with async_session_maker() as db:
@@ -232,7 +216,7 @@ class SimpleTCPServer:
                     processes_total=telemetry_data.processes_total,
                 )
                 await add_telemetry(telemetry_create, db)
-                logger.info(f"[TCP] Telemetry stored for node {telemetry_data.node_id}")
+                logger.info(f"[TCP] Telemetry stored for node {telemetry_data.node_id} (db_id={telemetry_create.node_id})")
 
             # Create telemetry acknowledgment
             return self.create_telemetry_ack(envelope.sequence)
@@ -257,6 +241,13 @@ class SimpleTCPServer:
                 import json
                 capabilities_json = json.dumps(register_data.capabilities) if register_data.capabilities else None
 
+                # Server config to send to node
+                server_config = ProtocolServerConfig(
+                    heartbeat_interval=10,
+                    telemetry_interval=2,
+                    model_update_url=None,
+                )
+
                 if existing_node:
                     # Update existing node
                     existing_node.hostname = register_data.hostname
@@ -271,6 +262,9 @@ class SimpleTCPServer:
                     existing_node.capabilities = capabilities_json
                     existing_node.status = NodeStatus.ONLINE
                     existing_node.last_seen = datetime.utcnow()
+                    # Update intervals from server config
+                    existing_node.heartbeat_interval = server_config.heartbeat_interval
+                    existing_node.telemetry_interval = server_config.telemetry_interval
 
                     await db.commit()
                     await db.refresh(existing_node)
@@ -295,18 +289,15 @@ class SimpleTCPServer:
                     )
 
                     new_node = await create_node(node_schema, db)
+                    # Set intervals on new node
+                    new_node.heartbeat_interval = server_config.heartbeat_interval
+                    new_node.telemetry_interval = server_config.telemetry_interval
                     await db.commit()
                     node_id = new_node.node_id
                     assigned_id = str(new_node.id)
                     message = "Node registered successfully"
 
                 # Create response
-                server_config = ProtocolServerConfig(
-                    heartbeat_interval=10,
-                    telemetry_interval=2,
-                    model_update_url=None,
-                )
-
                 response = RegisterResponse(
                     success=True,
                     node_id=node_id,
@@ -331,20 +322,20 @@ class SimpleTCPServer:
             logger.error(f"[TCP] Error handling registration: {e}")
             return self.create_error_response(envelope, 500, str(e))
 
-    def create_heartbeat_ack(self, commands: List[str] = None) -> Envelope:
+    def create_heartbeat_ack(self, sequence: int = 0) -> Envelope:
         """Create heartbeat acknowledgment with optional commands"""
         response = HeartbeatAck(
             node_id="server",
             server_time=int(datetime.utcnow().timestamp()),
             next_heartbeat_interval=10,
-            commands=commands or [],
+            commands=[],
         )
 
         payload = response.serialize()
         return Envelope(
             version=PROTOCOL_VERSION,
             msg_type=MessageType.HEARTBEAT_ACK,
-            sequence=0,
+            sequence=sequence,
             timestamp=int(datetime.utcnow().timestamp()),
             payload=payload,
         )
@@ -415,11 +406,15 @@ class SimpleTCPServer:
 
 async def start_tcp_server():
     """Start the TCP server"""
-    server = SimpleTCPServer(
-        host=settings.host,
-        port=settings.port + 1  # Use port+1 to avoid conflict with HTTP
-    )
-    await server.start()
+    try:
+        server = SimpleTCPServer(
+            host=settings.host,
+            port=settings.port + 1  # Use port+1 to avoid conflict with HTTP
+        )
+        await server.start()
+    except Exception as e:
+        logger.error(f"TCP server failed: {e}")
+        raise
 
 
 # Global reference to track connected clients for command sending

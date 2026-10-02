@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Node, TelemetryStats } from "../types";
-import { shutdownNode, sendNodeCommand, disconnectNode, reconnectNode } from "../api/client";
+import { shutdownNode, sendNodeCommand, disconnectNode, reconnectNode, deleteNode } from "../api/client";
 import { TelemetryCharts } from "./TelemetryCharts";
 import { TelemetryAggregated } from "../types";
 import { useAggregatedTelemetry } from "../hooks/useTelemetry";
@@ -9,6 +9,7 @@ import { useDebug } from "../context/DebugContext";
 interface NodeDetailProps {
   node: Node;
   stats?: TelemetryStats | null;
+  onNodeDeleted?: () => void;
 }
 
 const formatBytes = (bytes?: number) => {
@@ -45,7 +46,7 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "commands", label: "Commands", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> },
 ];
 
-export default function NodeDetail({ node, stats }: NodeDetailProps) {
+export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailProps) {
   const statusKey = node.status;
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -99,6 +100,27 @@ export default function NodeDetail({ node, stats }: NodeDetailProps) {
     { id: "update_heartbeat_interval", label: "Heartbeat: 60s", icon: "💓", variant: "info" as const, params: { interval: 60 } },
   ];
 
+  // Delete is a separate destructive action
+  const handleDelete = async () => {
+    if (!window.confirm(`PERMANENTLY delete node "${node.hostname}" (${node.node_id})? This cannot be undone.`)) return;
+    setActionLoading("delete");
+    setActionResult(null);
+    addEvent({ type: "command", node_id: node.node_id, message: `Deleting node ${node.node_id}` });
+    try {
+      const result = await deleteNode(node.node_id);
+      addEvent({ type: "command", node_id: node.node_id, message: `Node deleted: ${result.message}` });
+      setActionResult({ success: true, message: result.message || `Node ${node.node_id} deleted` });
+      // Call callback to refresh parent
+      if (onNodeDeleted) onNodeDeleted();
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || error.message || "Failed to delete node";
+      addEvent({ type: "error", node_id: node.node_id, message: `Delete failed: ${msg}` });
+      setActionResult({ success: false, message: msg });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="node-detail" role="main" aria-label={`Node details: ${node.hostname}`}>
       <header className="node-detail-header">
@@ -136,6 +158,23 @@ export default function NodeDetail({ node, stats }: NodeDetailProps) {
             )}
           </button>
         ))}
+        {/* Delete button - separate destructive action */}
+        <button
+          className={`btn btn-danger ${actionLoading === "delete" ? "btn-loading" : ""}`}
+          onClick={handleDelete}
+          disabled={actionLoading !== null}
+          aria-disabled={actionLoading !== null}
+          title="Permanently delete this node from the registry"
+        >
+          {actionLoading === "delete" ? (
+            <span className="animate-pulse">Deleting...</span>
+          ) : (
+            <>
+              <span aria-hidden="true">🗑️</span>
+              <span>Delete Node</span>
+            </>
+          )}
+        </button>
       </div>
 
       {actionResult && (
@@ -263,6 +302,34 @@ export default function NodeDetail({ node, stats }: NodeDetailProps) {
 
           {stats && stats.count > 0 ? (
             <>
+              {/* Live telemetry status indicator */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.75rem', 
+                padding: '0.75rem 1rem',
+                background: 'var(--accent-success-light)',
+                border: '1px solid var(--accent-success)',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '1rem'
+              }}>
+                <span className="status-dot online" style={{ width: '10px', height: '10px' }} />
+                <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>LIVE TELEMETRY</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                  {stats.latest_timestamp ? (
+                    <>
+                      Last update: {formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString())} ago
+                      {' | '}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                        {new Date(stats.latest_timestamp * 1000).toLocaleTimeString()}
+                      </span>
+                    </>
+                  ) : (
+                    'Waiting for first update...'
+                  )}
+                </span>
+              </div>
+
               <div className="stats-grid" style={{ marginBottom: '1.5rem' }} role="region" aria-label="Telemetry statistics">
                 <div className="stat-card">
                   <div className="stat-label">Data Points</div>
@@ -320,7 +387,24 @@ export default function NodeDetail({ node, stats }: NodeDetailProps) {
                 <path d="M2 20h20" />
               </svg>
               <h3 className="empty-state-title">No Telemetry Data</h3>
-              <p className="empty-state-text">This node has not sent any telemetry data yet. Data will appear here once the node starts reporting.</p>
+              <p className="empty-state-text">
+                This node has not sent any telemetry data yet.
+              </p>
+              <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)', textAlign: 'left', maxWidth: '400px' }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Node Status:</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                  <span className={`status-dot ${statusKey}`} />
+                  <span className={`status-badge status-${statusKey}`}>{statusKey.toUpperCase()}</span>
+                </div>
+                <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                  <div>Node ID: <code>{node.node_id}</code></div>
+                  <div>Last heartbeat: {new Date(node.last_seen).toLocaleString()} ({formatTimeAgo(node.last_seen)} ago)</div>
+                  <div>Telemetry interval: {node.telemetry_interval || '2'}s (configured by server)</div>
+                </div>
+                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--accent-warning)' }}>
+                  If node is ONLINE but no telemetry appears, check server logs for telemetry receipt.
+                </div>
+              </div>
             </div>
           )}
         </div>

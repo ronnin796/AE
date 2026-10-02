@@ -17,7 +17,7 @@ function AppContent() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
   // Fetch nodes for sidebar/overview
-  const { data: nodesData } = useNodes(1, 100);
+  const { data: nodesData, refetch: refetchNodes } = useNodes(1, 100);
   const { data: onlineNodes = [] } = useOnlineNodes();
   const { data: offlineNodes = [] } = useOfflineNodes();
 
@@ -40,6 +40,12 @@ function AppContent() {
     if (nodeId) {
       addEvent({ type: "connect", node_id: nodeId, message: `Selected node ${nodeId}` });
     }
+  };
+
+  const handleNodeDeleted = () => {
+    setSelectedNode(null);
+    refetchNodes();
+    addEvent({ type: "command", node_id: "system", message: "Node deleted, list refreshed" });
   };
 
   const handleRefresh = () => {
@@ -82,7 +88,7 @@ function AppContent() {
           <div className="content-area" role="main">
             {selectedNode && nodeDetail && !nodeLoading ? (
               <>
-                <NodeDetail node={nodeDetail} stats={stats} />
+                <NodeDetail node={nodeDetail} stats={stats} onNodeDeleted={handleNodeDeleted} />
               </>
             ) : selectedNode && nodeLoading ? (
               <div className="loading-detail" role="status" aria-live="polite">

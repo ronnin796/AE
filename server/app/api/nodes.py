@@ -111,6 +111,38 @@ async def get_offline_nodes_endpoint(
     return [NodeResponse.from_orm(node) for node in nodes]
 
 
+@router.get("/debug/registry", response_model=dict)
+async def debug_node_registry(
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Debug endpoint: Inspect the persistent node registry and active TCP connections.
+    Returns both persistent nodes and currently connected nodes.
+    """
+    from app.services.database import list_nodes
+    from app.tcp_server import _connected_clients
+    
+    # Get all persistent nodes
+    result = await list_nodes(page=1, page_size=1000, db=db)
+    
+    # Get active TCP connections
+    active_connections = list(_connected_clients.keys())
+    
+    # Build response with connection status
+    nodes_with_status = []
+    for node in result["nodes"]:
+        node_dict = node.model_dump() if hasattr(node, 'model_dump') else node.dict()
+        node_dict["tcp_connected"] = node_dict["node_id"] in active_connections
+        nodes_with_status.append(node_dict)
+    
+    return {
+        "persistent_nodes": nodes_with_status,
+        "total_persistent": result["total"],
+        "active_tcp_connections": active_connections,
+        "active_count": len(active_connections),
+    }
+
+
 @router.post("/{node_id}/status", response_model=NodeResponse)
 async def update_node_status_endpoint(
     node_id: str,
@@ -216,7 +248,7 @@ async def disconnect_node(
     This forces the node to reconnect on its next heartbeat/telemetry interval.
     """
     from app.services.database import get_node_by_id
-    from app.tcp_server import _connected_clients
+    from app.tcp_server import _connected_clients, send_command_to_node
     
     node = await get_node_by_id(node_id, db)
     if not node:
@@ -227,6 +259,7 @@ async def disconnect_node(
     
     # Close the TCP connection if it exists
     writer = _connected_clients.get(node_id)
+    disconnected = False
     if writer:
         try:
             # Send shutdown command first
@@ -235,6 +268,7 @@ async def disconnect_node(
             writer.close()
             await writer.wait_closed()
             logger.info(f"Disconnected node {node_id} via TCP")
+            disconnected = True
         except Exception as e:
             logger.error(f"Error disconnecting node {node_id}: {e}")
     
@@ -245,7 +279,7 @@ async def disconnect_node(
     return {
         "success": True,
         "node_id": node_id,
-        "message": f"Node {node_id} disconnected",
+        "message": f"Node {node_id} disconnected" + (" (TCP connection closed)" if disconnected else " (no active TCP connection)"),
     }
 
 
@@ -275,4 +309,47 @@ async def reconnect_node(
         "success": True,
         "node_id": node_id,
         "message": f"Node {node_id} marked for reconnection",
+    }
+
+
+@router.delete("/{node_id}", response_model=dict)
+async def delete_node(
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Delete a node permanently from the registry.
+    If the node is currently connected via TCP, its connection will be closed first.
+    """
+    from app.services.database import get_node_by_id
+    from app.tcp_server import _connected_clients, send_command_to_node
+    
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+    
+    # Close TCP connection if active
+    writer = _connected_clients.get(node_id)
+    if writer:
+        try:
+            # Send shutdown command first
+            await send_command_to_node(node_id, "shutdown", {})
+            # Close the connection
+            writer.close()
+            await writer.wait_closed()
+            logger.info(f"Closed TCP connection for node {node_id} during deletion")
+        except Exception as e:
+            logger.warning(f"Error closing connection for node {node_id} during deletion: {e}")
+    
+    # Delete from database (cascades to telemetry due to CASCADE on foreign key)
+    await db.delete(node)
+    await db.commit()
+    
+    return {
+        "success": True,
+        "node_id": node_id,
+        "message": f"Node {node_id} deleted permanently",
     }

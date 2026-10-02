@@ -16,6 +16,8 @@ export interface Node {
   last_seen: string;
   created_at: string;
   updated_at: string;
+  telemetry_interval?: number;
+  heartbeat_interval?: number;
 }
 
 export interface Telemetry {

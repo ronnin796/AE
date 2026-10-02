@@ -97,6 +97,8 @@ class NodeResponse(NodeBase):
     last_seen: datetime
     created_at: datetime
     updated_at: datetime
+    heartbeat_interval: int
+    telemetry_interval: int
 
 
 class NodeListResponse(BaseModel):

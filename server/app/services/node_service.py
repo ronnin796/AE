@@ -27,6 +27,9 @@ async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRe
         existing_node.arch = register_data.arch
         existing_node.status = NodeStatus.ONLINE
         existing_node.last_seen = datetime.utcnow()
+        # Set default intervals (can be overridden by TCP registration)
+        existing_node.heartbeat_interval = 10
+        existing_node.telemetry_interval = 2
 
         await db.commit()
         await db.refresh(existing_node)
@@ -42,6 +45,11 @@ async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRe
     else:
         # Create new node
         node = await db_create_node(register_data, db)
+        # Set default intervals
+        node.heartbeat_interval = 10
+        node.telemetry_interval = 2
+        await db.commit()
+        await db.refresh(node)
 
         return NodeRegisterResponse(
             success=True,

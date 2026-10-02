@@ -43,6 +43,7 @@ async def create_node(register_data: NodeRegister, db: AsyncSession) -> Node:
         capabilities=capabilities_json,
         tags=tags_json,
         status=NodeStatus.ONLINE,
+        # Defaults will be set by model, but can be overridden by callers
     )
     db.add(node)
     await db.commit()

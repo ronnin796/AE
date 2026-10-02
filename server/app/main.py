@@ -84,6 +84,10 @@ async def startup_event():
     # Start TCP server in background
     global tcp_server_task
     tcp_server_task = asyncio.create_task(start_tcp_server())
+    
+    # Give the TCP server a moment to start and bind to the port
+    await asyncio.sleep(0.5)
+    
     logger.info("TCP server started")
 
 

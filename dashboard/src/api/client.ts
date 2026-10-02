@@ -70,3 +70,13 @@ export async function reconnectNode(nodeId: string) {
   const response = await api.post(`/nodes/${nodeId}/reconnect`);
   return response.data;
 }
+
+export async function deleteNode(nodeId: string) {
+  const response = await api.delete(`/nodes/${nodeId}`);
+  return response.data;
+}
+
+export async function debugNodeRegistry() {
+  const response = await api.get('/nodes/debug/registry');
+  return response.data;
+}
