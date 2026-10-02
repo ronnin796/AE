@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(chmod +x *)",
+      "Bash(cargo build *)",
+      "Bash(cargo search *)"
+    ]
+  }
+}

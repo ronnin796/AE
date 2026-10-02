@@ -1,9 +1,17 @@
-# Rust
-/target/
-**/*.rs.bk
-Cargo.lock
+# OS
+.DS_Store
+Thumbs.db
 
-# Python
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+dashboard/node_modules/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,32 +24,24 @@ venv/
 *.egg-info/
 dist/
 build/
-
-# Node.js
-node_modules/
-dist/
-build/
-*.log
-npm-debug.log*
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project specific
-*.sqlite
-*.db
-*.onnx
-models/
-*.profraw
 coverage/
+*.profraw
 
-# Docker
-.docker/
+# Server runtime / test artifacts
+server/*.db
+server/*.sqlite
+server/*.sqlite3
+server/test_integration.db
+server/test_server.log
+
+# ML model artifacts
+ml/models/
+*.onnx
+*.pth
+*.pt
+
+# Rust
+/target/
+
+# Keep local Claude settings
+!.claude/settings.local.json
