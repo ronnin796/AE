@@ -13,113 +13,87 @@ const getFirstValue = (arr: (number | null)[] | undefined): number | null => {
 };
 
 export default function TelemetryDashboard({ nodeId, aggregatedTelemetry, stats }: TelemetryDashboardProps) {
-  // Use passed stats or fetch if not provided
   const { data: fetchedStats, isLoading: statsLoading } = useTelemetryStats(nodeId);
   const telemetryStats = stats || fetchedStats;
 
   if (!telemetryStats || telemetryStats.count === 0) {
     return (
-      <div className="telemetry-dashboard">
-        <h2>Node {nodeId} Telemetry</h2>
-        <div className="empty-state">
-          <p>Telemetry not available yet.</p>
-          <p className="empty-hint">This feature will be expanded in Part II.</p>
+      <div className="card telemetry-dashboard">
+        <h3 className="card-title">Telemetry</h3>
+        <div className="empty-state" style={{ padding: '2rem' }}>
+          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+            <path d="M18 20V10M12 20V4M6 20v-6" />
+            <path d="M2 20h20" />
+          </svg>
+          <h4 className="empty-state-title">No Telemetry Data</h4>
+          <p className="empty-state-text">Select a node to view telemetry statistics.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="telemetry-dashboard">
-      <h2>Node {nodeId} Telemetry</h2>
+    <div className="card telemetry-dashboard">
+      <header className="card-header">
+        <h3 className="card-title">Telemetry Summary</h3>
+      </header>
 
-      <div className="dashboard-stats">
-        <div className="stat-box">
-          <h3>Telemetry Summary</h3>
-          <div className="stat-grid">
-            <div>
-              <span>Avg CPU</span>
-              <strong>{telemetryStats.avg_cpu ? `${telemetryStats.avg_cpu.toFixed(1)}%` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Max CPU</span>
-              <strong>{telemetryStats.max_cpu ? `${telemetryStats.max_cpu.toFixed(1)}%` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Avg Memory</span>
-              <strong>{telemetryStats.avg_memory ? `${telemetryStats.avg_memory.toFixed(1)}%` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Max Memory</span>
-              <strong>{telemetryStats.max_memory ? `${telemetryStats.max_memory.toFixed(1)}%` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Avg Temperature</span>
-              <strong>{telemetryStats.avg_temperature ? `${telemetryStats.avg_temperature.toFixed(1)}°C` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Max Temperature</span>
-              <strong>{telemetryStats.max_temperature ? `${telemetryStats.max_temperature.toFixed(1)}°C` : "Not available"}</strong>
-            </div>
-            <div>
-              <span>Data Points</span>
-              <strong>{telemetryStats.count}</strong>
-            </div>
-            <div>
-              <span>Latest Reading</span>
-              <strong>
-                {telemetryStats.latest_timestamp
-                  ? new Date(telemetryStats.latest_timestamp * 1000).toLocaleString()
-                  : "Not available"}
-              </strong>
-            </div>
-          </div>
+      <div className="stats-grid" style={{ marginBottom: '1rem' }}>
+        <div className="stat-card">
+          <div className="stat-label">Data Points</div>
+          <div className="stat-value">{telemetryStats.count}</div>
         </div>
-
-        {aggregatedTelemetry && aggregatedTelemetry.timestamps.length > 0 && (
-          <div className="chart-summary">
-            <h4>Latest Measurements</h4>
-            <div className="latest-grid">
-              <div>
-                <span>CPU</span>
-                <strong>
-                  {getFirstValue(aggregatedTelemetry.cpu_usage) !== null
-                    ? `${getFirstValue(aggregatedTelemetry.cpu_usage)!.toFixed(1)}%`
-                    : "Not available"}
-                </strong>
-              </div>
-              <div>
-                <span>Memory</span>
-                <strong>
-                  {getFirstValue(aggregatedTelemetry.memory_usage) !== null
-                    ? `${getFirstValue(aggregatedTelemetry.memory_usage)!.toFixed(1)}%`
-                    : "Not available"}
-                </strong>
-              </div>
-              <div>
-                <span>Temp</span>
-                <strong>
-                  {getFirstValue(aggregatedTelemetry.temperature) !== null
-                    ? `${getFirstValue(aggregatedTelemetry.temperature)!.toFixed(1)}°C`
-                    : "Not available"}
-                </strong>
-              </div>
-              <div>
-                <span>Load</span>
-                <strong>
-                  {getFirstValue(aggregatedTelemetry.load_1) !== null
-                    ? `${getFirstValue(aggregatedTelemetry.load_1)!.toFixed(2)}`
-                    : "Not available"}
-                </strong>
-              </div>
-            </div>
-            <p className="chart-hint">Charts coming in Part II</p>
-          </div>
-        )}
+        <div className="stat-card">
+          <div className="stat-label">Avg CPU</div>
+          <div className="stat-value">{telemetryStats.avg_cpu ? `${telemetryStats.avg_cpu.toFixed(1)}%` : "N/A"}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Avg Memory</div>
+          <div className="stat-value">{telemetryStats.avg_memory ? `${telemetryStats.avg_memory.toFixed(1)}%` : "N/A"}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Avg Temp</div>
+          <div className="stat-value">{telemetryStats.avg_temperature ? `${telemetryStats.avg_temperature.toFixed(1)}°C` : "N/A"}</div>
+        </div>
       </div>
 
+      {aggregatedTelemetry && aggregatedTelemetry.timestamps.length > 0 && (
+        <div className="chart-summary" style={{ paddingTop: '1rem', borderTop: '1px solid var(--border-primary)' }}>
+          <h4 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
+            Latest Measurements
+          </h4>
+          <div className="latest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-primary)' }}>
+              <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>CPU</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                {getFirstValue(aggregatedTelemetry.cpu_usage) !== null ? `${getFirstValue(aggregatedTelemetry.cpu_usage)!.toFixed(1)}%` : "N/A"}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-primary)' }}>
+              <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Memory</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-success)' }}>
+                {getFirstValue(aggregatedTelemetry.memory_usage) !== null ? `${getFirstValue(aggregatedTelemetry.memory_usage)!.toFixed(1)}%` : "N/A"}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-primary)' }}>
+              <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Temp</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-warning)' }}>
+                {getFirstValue(aggregatedTelemetry.temperature) !== null ? `${getFirstValue(aggregatedTelemetry.temperature)!.toFixed(1)}°C` : "N/A"}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: 'var(--radius-md)', textAlign: 'center', border: '1px solid var(--border-primary)' }}>
+              <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Load</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-info)' }}>
+                {getFirstValue(aggregatedTelemetry.load_1) !== null ? `${getFirstValue(aggregatedTelemetry.load_1)!.toFixed(2)}` : "N/A"}
+              </div>
+            </div>
+          </div>
+          <p className="chart-hint">Click node for full charts →</p>
+        </div>
+      )}
+
       {statsLoading && !stats && (
-        <p className="loading">Loading telemetry statistics...</p>
+        <p className="loading" style={{ textAlign: 'center', color: 'var(--text-tertiary)', marginTop: '1rem' }}>Loading statistics...</p>
       )}
     </div>
   );

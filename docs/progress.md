@@ -2,7 +2,7 @@
 
 ## Current Status
 
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-01
 
 **Phase:** ✅ **COMPLETE - Ready for Presentation**
 
@@ -55,23 +55,28 @@ All Part I milestones are finished. The prototype meets all 16 success criteria 
 - [x] app/services/heartbeat_service.py (timeout detection)
 - [x] app/services/inference_service.py (inference stub)
 
-### [x] **Milestone 6 — Dashboard**
-- [x] dashboard/package.json (React + Vite + TypeScript)
+### [x] **Milestone 6 — Dashboard (ENHANCED)**
+- [x] dashboard/package.json (React + Vite + TypeScript + Recharts)
 - [x] dashboard/tsconfig.json
 - [x] dashboard/vite.config.ts
 - [x] dashboard/index.html
-- [x] dashboard/src/main.tsx
-- [x] dashboard/src/App.tsx (main layout)
-- [x] dashboard/src/components/NodeList.tsx (overview dashboard)
-- [x] dashboard/src/components/NodeCard.tsx (individual node view)
-- [x] dashboard/src/components/TelemetryCharts.tsx (recharts charts)
-- [x] dashboard/src/components/TelemetryDashboard.tsx
-- [x] dashboard/src/components/StatusBadge.tsx (online/offline badge)
-- [x] dashboard/src/components/StatusSummary.tsx
+- [x] dashboard/src/main.tsx (QueryClient + ThemeProvider)
+- [x] dashboard/src/App.tsx (sidebar + content layout)
+- [x] dashboard/src/context/ThemeContext.tsx (dark/light theme)
+- [x] dashboard/src/components/NavBar.tsx (theme toggle, node counts)
+- [x] dashboard/src/components/NodeOverview.tsx (sidebar cluster stats)
+- [x] dashboard/src/components/NodeList.tsx (search, filter, sort, pagination)
+- [x] dashboard/src/components/NodeCard.tsx (enhanced with telemetry preview)
+- [x] dashboard/src/components/NodeDetail.tsx (4 tabs: Overview, Telemetry, System, Commands)
+- [x] dashboard/src/components/TelemetryCharts.tsx (Recharts: CPU, Memory, Temp, Load)
+- [x] dashboard/src/components/TelemetryDashboard.tsx (sidebar summary)
+- [x] dashboard/src/components/StatusSummary.tsx (metrics grid)
+- [x] dashboard/src/components/StatusBadge.tsx (reusable status indicator)
 - [x] dashboard/src/hooks/useNodes.ts (React Query polling)
-- [x] dashboard/src/hooks/useTelemetry.ts
+- [x] dashboard/src/hooks/useTelemetry.ts (React Query polling)
 - [x] dashboard/src/api/client.ts (Axios wrapper)
-- [x] dashboard/src/types/index.ts (TypeScript types)
+- [x] dashboard/src/types/index.ts (TypeScript interfaces)
+- [x] dashboard/src/index.css (design system, CSS variables, themes)
 
 ### [x] **Milestone 7 — AI Inference & Quantization**
 - [x] inference/mod.rs (InferenceEngine struct)

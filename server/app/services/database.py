@@ -20,6 +20,15 @@ async def get_node_by_id(node_id: str, db: AsyncSession) -> Optional[Node]:
 
 async def create_node(register_data: NodeRegister, db: AsyncSession) -> Node:
     """Create a new node from registration data"""
+    import json
+    capabilities_json = None
+    if register_data.capabilities:
+        capabilities_json = json.dumps(register_data.capabilities)
+
+    tags_json = None
+    if register_data.tags:
+        tags_json = json.dumps(register_data.tags)
+
     node = Node(
         node_id=register_data.node_id,
         hostname=register_data.hostname,
@@ -31,6 +40,8 @@ async def create_node(register_data: NodeRegister, db: AsyncSession) -> Node:
         total_memory=register_data.total_memory,
         version=register_data.version,
         arch=register_data.arch,
+        capabilities=capabilities_json,
+        tags=tags_json,
         status=NodeStatus.ONLINE,
     )
     db.add(node)
@@ -46,6 +57,16 @@ async def update_node(node_id: str, update_data: NodeUpdate, db: AsyncSession) -
         raise ValueError(f"Node {node_id} not found")
 
     update_dict = update_data.model_dump(exclude_unset=True)
+
+    # Handle tags specially - serialize to JSON string
+    if 'tags' in update_dict:
+        import json
+        tags_value = update_dict.pop('tags')
+        if tags_value is not None:
+            node.tags = json.dumps(tags_value)
+        else:
+            node.tags = None
+
     for key, value in update_dict.items():
         setattr(node, key, value)
 

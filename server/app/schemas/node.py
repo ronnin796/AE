@@ -1,15 +1,9 @@
 """Node Pydantic schemas for API"""
 
+import json
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class NodeCapabilities(BaseModel):
-    """Node capabilities"""
-    telemetry: bool = True
-    heartbeat: bool = True
-    inference: bool = False
+from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class NodeBase(BaseModel):
@@ -24,8 +18,40 @@ class NodeBase(BaseModel):
     total_memory: Optional[int] = Field(default=None, ge=0)
     version: Optional[str] = Field(default=None, max_length=50)
     arch: Optional[str] = Field(default=None, max_length=20)
-    capabilities: Optional[NodeCapabilities] = None
+    capabilities: Optional[List[str]] = None
     tags: Optional[dict[str, str]] = None
+
+    @field_validator('capabilities', mode='before')
+    @classmethod
+    def parse_capabilities(cls, v):
+        """Parse capabilities from JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+                return None
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return v
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        """Parse tags from JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+                return None
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return v
 
 
 class NodeRegister(NodeBase):

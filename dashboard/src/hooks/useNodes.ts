@@ -15,6 +15,7 @@ export function useNode(nodeId: string) {
     queryKey: ['node', nodeId],
     queryFn: () => getNode(nodeId),
     refetchInterval: 10000,
+    enabled: !!nodeId,
   });
 }
 

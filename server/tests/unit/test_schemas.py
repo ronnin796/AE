@@ -10,7 +10,6 @@ from app.schemas.node import (
     NodeResponse,
     ServerConfig,
     NodeListResponse,
-    NodeCapabilities,
 )
 from app.schemas.telemetry import (
     TelemetryBase,
@@ -104,11 +103,20 @@ class TestNodeSchemas:
         assert config.model_update_url == "http://example.com/model"
 
     def test_node_capabilities(self):
-        """Test NodeCapabilities schema"""
-        caps = NodeCapabilities(telemetry=True, heartbeat=True, inference=True)
-        assert caps.telemetry is True
-        assert caps.heartbeat is True
-        assert caps.inference is True
+        """Test capabilities field accepts list of strings and JSON string"""
+        node = NodeBase(
+            node_id="test-node",
+            hostname="test-host",
+            capabilities=["telemetry", "heartbeat", "inference"],
+        )
+        assert node.capabilities == ["telemetry", "heartbeat", "inference"]
+
+        node2 = NodeBase(
+            node_id="test-node",
+            hostname="test-host",
+            capabilities='["telemetry", "heartbeat"]',
+        )
+        assert node2.capabilities == ["telemetry", "heartbeat"]
 
     def test_node_list_response(self):
         """Test NodeListResponse schema"""

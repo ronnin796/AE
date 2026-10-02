@@ -1,7 +1,6 @@
 """Schemas package"""
 from app.schemas.node import (
     NodeBase,
-    NodeCapabilities,
     NodeListResponse,
     NodeRegister,
     NodeRegisterResponse,
@@ -20,7 +19,6 @@ from app.schemas.telemetry import (
 
 __all__ = [
     "NodeBase",
-    "NodeCapabilities",
     "NodeListResponse",
     "NodeRegister",
     "NodeRegisterResponse",

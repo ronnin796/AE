@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.node import Node, NodeStatus
-from app.schemas.node import NodeRegister, NodeRegisterResponse, ServerConfig, NodeUpdate
+from app.schemas.node import NodeRegister, NodeRegisterResponse, ServerConfig
 from app.services.database import create_node as db_create_node, get_node_by_id, update_node as db_update_node
 
 

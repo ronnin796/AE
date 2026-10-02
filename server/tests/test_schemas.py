@@ -20,7 +20,6 @@ from app.schemas.node import (
     NodeResponse,
     NodeListResponse,
     ServerConfig,
-    NodeCapabilities,
 )
 
 
@@ -160,11 +159,25 @@ class TestNodeSchemas:
     """Tests for node Pydantic schemas"""
 
     def test_node_capabilities_defaults(self):
-        """Test NodeCapabilities default values"""
-        caps = NodeCapabilities()
-        assert caps.telemetry is True
-        assert caps.heartbeat is True
-        assert caps.inference is False
+        """Test capabilities field defaults to None and accepts list of strings"""
+        data = NodeBase(node_id="test-node", hostname="test-host")
+        assert data.capabilities is None
+
+        data2 = NodeBase(
+            node_id="test-node",
+            hostname="test-host",
+            capabilities=["telemetry", "heartbeat", "inference"],
+        )
+        assert data2.capabilities == ["telemetry", "heartbeat", "inference"]
+
+    def test_node_capabilities_json_string(self):
+        """Test capabilities can be provided as a JSON string"""
+        data = NodeBase(
+            node_id="test-node",
+            hostname="test-host",
+            capabilities='["telemetry", "heartbeat"]',
+        )
+        assert data.capabilities == ["telemetry", "heartbeat"]
 
     def test_node_base_required_fields(self):
         """Test NodeBase required fields"""

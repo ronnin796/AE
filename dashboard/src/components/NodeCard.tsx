@@ -8,11 +8,10 @@ interface NodeCardProps {
   onSelect: (nodeId: string) => void;
 }
 
-const statusColor = {
-  online: "bg-green-500",
-  offline: "bg-red-500",
-  degraded: "bg-yellow-500",
-  maintenance: "bg-blue-500",
+const formatBytes = (bytes?: number) => {
+  if (!bytes) return "N/A";
+  const gb = bytes / 1024 / 1024 / 1024;
+  return `${gb.toFixed(2)} GB`;
 };
 
 const formatRelativeTime = (dateString: string) => {
@@ -30,88 +29,137 @@ const formatRelativeTime = (dateString: string) => {
   return `${diffDays}d ago`;
 };
 
-const formatBytes = (bytes?: number) => {
-  if (!bytes) return "Not available";
-  const gb = bytes / 1024 / 1024 / 1024;
-  return `${gb.toFixed(2)} GB`;
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "online": return "online";
+    case "offline": return "offline";
+    case "degraded": return "degraded";
+    case "maintenance": return "maintenance";
+    default: return "offline";
+  }
 };
 
 export default function NodeCard({ node, stats, isLoadingStats, onSelect }: NodeCardProps) {
-  const statusClass = statusColor[node.status] || "bg-gray-500";
-  const dotClass = statusClass.replace("bg-", "");
+  const statusKey = getStatusColor(node.status);
+  const isOnline = node.status === "online";
 
   return (
-    <div className="node-card" onClick={() => onSelect(node.node_id)}>
-      <div className="card-header">
-        <h3>{node.hostname || node.node_id}</h3>
-        <div className="card-status">
-          <span className={`status-dot ${dotClass}`}></span>
-          <span className="card-status-text">{node.status.toUpperCase()}</span>
+    <article
+      className={`node-card ${node.status}`}
+      onClick={() => onSelect(node.node_id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(node.node_id); } }}
+      tabIndex={0}
+      role="button"
+      aria-label={`View details for ${node.hostname || node.node_id}`}
+      data-node-id={node.node_id}
+    >
+      <header className="node-card-header">
+        <div className="node-card-title">
+          <div
+            className={`status-dot ${statusKey}`}
+            aria-hidden="true"
+          />
+          <h3 className="node-card-name" title={node.hostname || node.node_id}>
+            {node.hostname || node.node_id}
+          </h3>
+        </div>
+        <span className={`status-badge status-${node.status}`}>
+          {node.status.toUpperCase()}
+        </span>
+      </header>
+
+      <div className="node-card-body">
+        <div className="node-card-field">
+          <span className="node-card-field-label">Node ID</span>
+          <span className="node-card-field-value truncate" title={node.node_id}>{node.node_id}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">OS</span>
+          <span className="node-card-field-value truncate">{node.os} {node.os_version || ""}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">Kernel</span>
+          <span className="node-card-field-value truncate">{node.kernel_version || "N/A"}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">Architecture</span>
+          <span className="node-card-field-value truncate">{node.arch || "N/A"}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">CPU</span>
+          <span className="node-card-field-value truncate">
+            {node.cpu_brand || "Unknown"} ({node.cpu_cores || "?"} cores)
+          </span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">Total Memory</span>
+          <span className="node-card-field-value">{formatBytes(node.total_memory)}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">AetherEdge Version</span>
+          <span className="node-card-field-value truncate">{node.version || "N/A"}</span>
+        </div>
+        <div className="node-card-field">
+          <span className="node-card-field-label">Status Since</span>
+          <span className="node-card-field-value">
+            {formatRelativeTime(node.last_seen)}
+          </span>
         </div>
       </div>
 
-      <dl className="node-info">
-        <div>
-          <dt>Node ID</dt>
-          <dd>{node.node_id}</dd>
-        </div>
-        <div>
-          <dt>OS</dt>
-          <dd>{node.os} {node.os_version || ""}</dd>
-        </div>
-        <div>
-          <dt>Kernel</dt>
-          <dd>{node.kernel_version || "Not available"}</dd>
-        </div>
-        <div>
-          <dt>CPU</dt>
-          <dd>{node.cpu_brand || "Not available"} ({node.cpu_cores || "?"} cores)</dd>
-        </div>
-        <div>
-          <dt>Total Memory</dt>
-          <dd>{formatBytes(node.total_memory)}</dd>
-        </div>
-        <div>
-          <dt>Version</dt>
-          <dd>{node.version || "Not available"}</dd>
-        </div>
-      </dl>
-
-      {stats && stats.count > 0 && (
-        <div className="telemetry-stats">
-          <h4>Telemetry Summary</h4>
-          <div className="stats-grid">
-            <div>
-              <span>Avg CPU</span>
-              <strong>{stats.avg_cpu ? `${stats.avg_cpu.toFixed(1)}%` : "N/A"}</strong>
+      {(stats && stats.count > 0) && (
+        <section className="node-card-telemetry" aria-label="Telemetry summary">
+          <h4 className="node-card-telemetry-title">Telemetry Summary</h4>
+          <div className="node-card-metrics" role="list" aria-label="Key metrics">
+            <div className="node-card-metric" role="listitem">
+              <div className="node-card-metric-value">
+                {stats.avg_cpu ? `${stats.avg_cpu.toFixed(1)}%` : "—"}
+              </div>
+              <div className="node-card-metric-label">Avg CPU</div>
             </div>
-            <div>
-              <span>Avg Memory</span>
-              <strong>{stats.avg_memory ? `${stats.avg_memory.toFixed(1)}%` : "N/A"}</strong>
+            <div className="node-card-metric" role="listitem">
+              <div className="node-card-metric-value">
+                {stats.max_cpu ? `${stats.max_cpu.toFixed(1)}%` : "—"}
+              </div>
+              <div className="node-card-metric-label">Peak CPU</div>
             </div>
-            <div>
-              <span>Avg Temp</span>
-              <strong>{stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "N/A"}</strong>
+            <div className="node-card-metric" role="listitem">
+              <div className="node-card-metric-value">
+                {stats.avg_memory ? `${stats.avg_memory.toFixed(1)}%` : "—"}
+              </div>
+              <div className="node-card-metric-label">Avg Memory</div>
             </div>
-            <div>
-              <span>Data Points</span>
-              <strong>{stats.count}</strong>
+            <div className="node-card-metric" role="listitem">
+              <div className="node-card-metric-value">
+                {stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "—"}
+              </div>
+              <div className="node-card-metric-label">Avg Temp</div>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {isLoadingStats && (
-        <div className="loading-stats">Loading telemetry stats...</div>
+        <section className="node-card-telemetry" aria-label="Loading telemetry">
+          <div className="skeleton skeleton-text short" style={{ margin: '0 auto' }} />
+        </section>
       )}
 
-      <div className="card-footer">
-        <div className="heartbeat-info">
-          <span className={`status-dot ${dotClass}`}></span>
-          <span>Last heartbeat: {formatRelativeTime(node.last_seen)}</span>
+      {!stats && !isLoadingStats && (
+        <section className="node-card-telemetry" aria-label="No telemetry">
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+            No telemetry data yet
+          </p>
+        </section>
+      )}
+
+      <footer className="node-card-footer">
+        <div className="node-card-last-seen">
+          <span className={`status-dot ${statusKey}`} aria-hidden="true" />
+          <span>Last seen: {formatRelativeTime(node.last_seen)}</span>
         </div>
-        <span className="view-hint">Click to view details →</span>
-      </div>
-    </div>
+        <span className="node-card-view-hint">Click for details →</span>
+      </footer>
+    </article>
   );
 }

@@ -13,13 +13,14 @@
 |-------|----------|-------|
 | 1. Problem & Architecture | 1 min | Context & system design |
 | 2. System Startup | 1.5 min | Server + 2 edge nodes |
-| 3. Dashboard Overview | 1 min | Node monitoring UI |
-| 4. Live Telemetry | 1.5 min | Real CPU/Memory/Temperature |
-| 5. Workload Injection | 2 min | CPU spike observation |
+| 3. Dashboard Overview | 1.5 min | **Enhanced** node monitoring UI with sidebar |
+| 4. Live Telemetry | 2 min | Real CPU/Memory/Temperature **charts** |
+| 5. Workload Injection | 2 min | CPU spike observation **in real-time charts** |
 | 6. Node Failure | 1 min | Disconnection detection |
 | 7. Node Recovery | 1 min | Reconnection |
-| 8. Test Evidence | 30 sec | Test campaign summary |
-| 9. Part I → Part II | 30 sec | Roadmap |
+| 8. Node Control | 1 min | **NEW** Remote commands (shutdown, reboot, intervals) |
+| 9. Test Evidence | 30 sec | Test campaign summary |
+| 10. Part I → Part II | 30 sec | Roadmap |
 
 **Total: ~10 minutes**
 
@@ -36,7 +37,7 @@
 **Show:** Architecture diagram (FIG-01)
 - **Edge Nodes:** Rust daemon → Linux `/proc`/`/sys` → TCP binary protocol
 - **Server:** FastAPI + SQLite + HTTP API
-- **Dashboard:** React + TanStack Query + Recharts
+- **Dashboard:** React + TanStack Query + Recharts + **Theme support**
 - **Key Point:** "Everything you'll see uses real `/proc` data — no mocks."
 
 ---
@@ -67,16 +68,19 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2
 
 ---
 
-### 3. Dashboard Overview (1 minute)
+### 3. Dashboard Overview (1.5 minutes)
 
-> **Speaker:** "The React dashboard polls the HTTP API every 5 seconds."
+> **Speaker:** "The React dashboard polls the HTTP API every 5 seconds. The new layout features a persistent sidebar with cluster overview and a main content area."
 
 **Open:** http://localhost:5173 (or served dist/)
 
 **Show DEMO-01:** Dashboard with both nodes
-- **Overview Cards:** "2 Total, 2 Online, 0 Offline"
-- **Node List:** Both nodes with hostname, OS, CPU cores, memory
-- **Status Indicators:** Green "ONLINE" badges
+- **Sidebar:** Cluster overview with stat cards (Total, Online, Offline, Degraded)
+- **Sidebar:** Real-time telemetry summary for selected node
+- **Main Area:** Node grid with enhanced cards showing hostname, OS, CPU, memory, version, last seen
+- **Status Indicators:** Color-coded badges with animated status dots
+- **Search & Filter:** Search by name/ID/OS, filter by status, sort options
+- **Theme Toggle:** Dark/Light mode in navbar (persisted to localStorage)
 
 **Key Point:** "All data comes from HTTP API → SQLite → TCP protocol → actual Linux `/proc`"
 
@@ -84,19 +88,23 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2
 
 ---
 
-### 4. Live Telemetry (1.5 minutes)
+### 4. Live Telemetry (2 minutes)
 
-> **Speaker:** "Let's look at real-time telemetry for each node."
+> **Speaker:** "Let's look at real-time telemetry with interactive charts."
 
 **Actions:**
-1. Click Node A → Shows DEMO-02 (CPU, Memory, Temp, Load charts)
-2. Click Node B → Shows DEMO-03
+1. Click Node A → Shows **Overview tab** with system info + telemetry summary
+2. Click **Telemetry tab** → Shows **interactive Recharts** (CPU, Memory, Temp, Load)
+3. Click **System tab** → Detailed system information
+4. Click **Commands tab** → Available remote commands
+5. Click Node B → Compare
 
 **Narrate:**
 - "CPU chart updates every 2 seconds with actual `/proc/stat` delta"
 - "Memory from `/proc/meminfo` — total, available, used, percentage"
 - "Temperature from `/sys/class/thermal` — real Celsius readings"
 - "Load average from `/proc/loadavg`"
+- "Charts are interactive — hover for exact values, responsive layout"
 
 **Point at charts:** "Notice the natural variation — this is real system activity, not synthetic data."
 
@@ -106,7 +114,7 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2
 
 ### 5. Workload Injection (2 minutes)
 
-> **Speaker:** "Now let's generate real CPU load on Node A and watch the dashboard respond."
+> **Speaker:** "Now let's generate real CPU load on Node A and watch the dashboard respond in real-time."
 
 **Command:**
 ```bash
@@ -119,11 +127,13 @@ stress-ng --cpu 4 --timeout 30
 - Node A CPU chart spikes from ~10% to ~80%+
 - Memory may increase slightly
 - Charts update in real-time (2s interval)
+- Sidebar telemetry summary updates automatically
 
 **Narrate:**
 - "This is real CPU consumption from `stress-ng`"
 - "Telemetry interval is 2 seconds — you see the spike within 2 seconds"
 - "No polling delay, no synthetic interpolation"
+- "Peak values captured in stats"
 
 **Evidence:** DEMO-05 (GIF of CPU spike)
 
@@ -141,9 +151,11 @@ pkill -f "demo-node-b"
 **Wait 15 seconds...** (heartbeat timeout + maintenance check)
 
 **Observe DEMO-06:**
-- Node B status changes from "ONLINE" to "OFFLINE"
-- Overview cards update: "Online: 1, Offline: 1"
+- Node B status changes from "ONLINE" to "OFFLINE" (red badge)
+- Sidebar overview cards update: "Online: 1, Offline: 1"
+- Node card shows red status bar and OFFLINE badge
 - Last seen timestamp freezes
+- Connection quality indicator shows offline
 
 **Narrate:**
 - "Server detects missing heartbeat after configurable timeout (default 30s)"
@@ -165,8 +177,10 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 
 **Observe DEMO-07 (GIF):**
 - Node B reappears in node list
-- Status changes to "ONLINE"
+- Status changes to "ONLINE" (green badge)
 - Telemetry resumes immediately
+- Charts continue from where they left off
+- Same node ID preserves identity and history
 
 **Narrate:**
 - "No manual intervention needed — daemon re-registers automatically"
@@ -177,7 +191,33 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 
 ---
 
-### 8. Test Evidence Summary (30 seconds)
+### 8. Node Control (1 minute) — **NEW**
+
+> **Speaker:** "The dashboard now supports sending commands to edge nodes via the TCP control channel."
+
+**Actions:**
+1. Select Node A → Click **Commands tab**
+2. Click "Telemetry: 5s" → Observe interval change confirmation
+3. Click "Heartbeat: 10s" → Observe confirmation
+4. (Optional) Click "Reboot Node" → Confirm → Node restarts
+5. (Optional) Click "Shutdown Node" → Confirm → Node stops gracefully
+
+**Observe:**
+- Toast notifications for command success/failure
+- Commands disabled when node is offline
+- Confirmation dialogs for destructive actions
+
+**Narrate:**
+- "Commands sent via TCP control channel, not HTTP"
+- "Background task queue on server ensures delivery"
+- "Node applies config changes without restart (for intervals)"
+- "Full audit trail in server logs"
+
+**Evidence:** DEMO-08 (screenshots of command execution)
+
+---
+
+### 9. Test Evidence Summary (30 seconds)
 
 > **Speaker:** "Let me briefly summarize the test campaign that validates all this."
 
@@ -195,12 +235,13 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 - Edge daemon: 29 MB RAM, 0.13% CPU
 - Telemetry: 573 bytes, 2.00s interval ±0%
 - 60s sustained: 33 samples/node, zero loss
+- Dashboard: < 200ms initial load, 60fps charts
 
 **Evidence:** All logs in `docs/testing/logs/`
 
 ---
 
-### 9. Part I → Part II Roadmap (30 seconds)
+### 10. Part I → Part II Roadmap (30 seconds)
 
 > **Speaker:** "Part I establishes the foundation. Part II adds production capabilities."
 
@@ -215,6 +256,9 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 | ✅ ONNX inference engine | 📦 Model registry + versioning |
 | ✅ 29 MB / 0.13% CPU | 📊 Advanced scheduling |
 | ✅ 2s interval precision | ⚡ Sub-second intervals |
+| ✅ **Interactive charts (Recharts)** | 📈 Advanced analytics |
+| ✅ **Dark/Light theme** | 🎨 Custom theming |
+| ✅ **Remote node commands** | 🎮 Fleet management |
 
 **Closing:** "AetherEdge Part I is a working, tested foundation. All code is open, all tests reproducible. Ready for Part II."
 
@@ -227,7 +271,8 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 2. **Telemetry Collection** — `/proc/stat` delta calculation, thermal zones
 3. **Database Schema** — Nodes + Telemetry tables, indexes, relationships
 4. **Benchmark Methodology** — psutil sampling, JSON size measurement
-4. **Test Reproducibility** — All commands in `docs/testing/reproduction.md`
+5. **Test Reproducibility** — All commands in `docs/testing/reproduction.md`
+6. **Dashboard Architecture** — React Query caching, component composition, CSS variables theming
 
 ---
 
@@ -240,6 +285,7 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 | Network issues | All local (localhost), no external deps |
 | Demo too long | Skip to key moments, have 5-min version ready |
 | Committee asks for code | GitHub repo ready, specific files bookmarked |
+| Charts don't render | Static chart screenshots as backup |
 
 ---
 
@@ -249,13 +295,14 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 |---------|--------|-----|
 | 1. Problem/Architecture | 1:00 | 1:30 |
 | 2. System Startup | 1:30 | 2:00 |
-| 3. Dashboard Overview | 1:00 | 1:30 |
-| 4. Live Telemetry | 1:30 | 2:00 |
+| 3. Dashboard Overview | 1:30 | 2:00 |
+| 4. Live Telemetry | 2:00 | 2:30 |
 | 5. Workload Injection | 2:00 | 2:30 |
 | 6. Node Failure | 1:00 | 1:30 |
 | 7. Node Recovery | 1:00 | 1:30 |
-| 8. Test Evidence | 0:30 | 1:00 |
-| 9. Part II Roadmap | 0:30 | 1:00 |
+| 8. Node Control | 1:00 | 1:30 |
+| 9. Test Evidence | 0:30 | 1:00 |
+| 10. Part II Roadmap | 0:30 | 1:00 |
 | **Total** | **10:00** | **13:00** |
 
 ---
@@ -264,10 +311,23 @@ cd edge && cargo run -- --node-id demo-node-b --telemetry-interval 2 &
 
 If time-critical:
 1. **30s** — Architecture + startup (show already running)
-2. **1:30** — Dashboard + live telemetry (both nodes)
-3. **1:30** — Workload spike + node failure
-4. **1:00** — Recovery + test summary
+2. **1:30** — Dashboard + live telemetry (both nodes, charts)
+3. **1:30** — Workload spike + node failure + recovery
+4. **1:00** — Node control demo + test summary
 5. **0:30** — Part II roadmap
+
+---
+
+## Demo Environment Checklist
+
+- [ ] Server running on port 8080
+- [ ] Two edge nodes: `demo-node-a`, `demo-node-b`
+- [ ] Dashboard at http://localhost:5173
+- [ ] `stress-ng` installed for workload injection
+- [ ] Browser: Chrome/Firefox (tested)
+- [ ] Screen resolution: 1920x1080 minimum
+- [ ] Backup: Pre-recorded GIFs in `docs/demo/assets/`
+- [ ] Theme: Test both dark/light modes
 
 ---
 

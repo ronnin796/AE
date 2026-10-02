@@ -1,5 +1,6 @@
 """Node-related API endpoints"""
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
@@ -9,7 +10,6 @@ from app.database import get_db
 from app.models.node import Node, NodeStatus
 from app.schemas.node import (
     NodeBase,
-    NodeCapabilities,
     NodeListResponse,
     NodeRegister,
     NodeRegisterResponse,
@@ -28,9 +28,11 @@ from app.services.heartbeat_service import (
     get_online_nodes,
     get_offline_nodes,
 )
-from app.tcp_server import send_command_to_node
+from app.tcp_server import send_command_to_node, _connected_clients
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 @router.post("/register", response_model=NodeRegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -201,4 +203,76 @@ async def shutdown_node(
         "success": True,
         "node_id": node_id,
         "message": f"Shutdown command sent to node {node_id}",
+    }
+
+
+@router.post("/{node_id}/disconnect", response_model=dict)
+async def disconnect_node(
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Disconnect a node by closing its TCP connection.
+    This forces the node to reconnect on its next heartbeat/telemetry interval.
+    """
+    from app.services.database import get_node_by_id
+    from app.tcp_server import _connected_clients
+    
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+    
+    # Close the TCP connection if it exists
+    writer = _connected_clients.get(node_id)
+    if writer:
+        try:
+            # Send shutdown command first
+            await send_command_to_node(node_id, "shutdown", {})
+            # Close the connection
+            writer.close()
+            await writer.wait_closed()
+            logger.info(f"Disconnected node {node_id} via TCP")
+        except Exception as e:
+            logger.error(f"Error disconnecting node {node_id}: {e}")
+    
+    # Update node status in database
+    node.status = NodeStatus.OFFLINE
+    await db.commit()
+    
+    return {
+        "success": True,
+        "node_id": node_id,
+        "message": f"Node {node_id} disconnected",
+    }
+
+
+@router.post("/{node_id}/reconnect", response_model=dict)
+async def reconnect_node(
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Mark a node as ready for reconnection.
+    The agent will automatically reconnect on its next interval.
+    """
+    from app.services.database import get_node_by_id
+    
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Node {node_id} not found",
+        )
+    
+    # Just mark as offline - the agent will re-register on next connection
+    node.status = NodeStatus.OFFLINE
+    await db.commit()
+    
+    return {
+        "success": True,
+        "node_id": node_id,
+        "message": f"Node {node_id} marked for reconnection",
     }

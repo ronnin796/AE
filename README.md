@@ -20,10 +20,10 @@ This repository contains the **Part I prototype** (~50-60% of final system):
 | FastAPI Server | ✅ Node Registry + Telemetry Ingestion + SQLite |
 | Communication Protocol | ✅ MessagePack over TCP |
 | Linux Telemetry | ✅ CPU, Memory, Temperature, Uptime, Load |
-| Node Registration | ✅ Register + Heartbeat + ONLINE/OFFLINE |
+| Node Registration | ✅ Register + Heartbeat + ONLINE/OFFLINE/DEGRADED/Maintenance |
 | AI Inference | ✅ ONNX Runtime local inference |
 | INT8 Quantization | ✅ Static quantization + benchmarks |
-| React Dashboard | ✅ Node list + Telemetry charts |
+| React Dashboard | ✅ **Node list + Interactive Telemetry Charts + Node Control** |
 
 ### Part II Scope (Future)
 
@@ -45,16 +45,19 @@ This repository contains the **Part I prototype** (~50-60% of final system):
 ┌─────────────┐     TCP/MessagePack      ┌──────────────┐
 │  Edge Node  │ ◄──────────────────────► │ FastAPI      │
 │  (Rust)     │  Register, Heartbeat,    │ Server       │
-│             │  Telemetry, Inference    │              │
-│  - /proc    │                          │  - SQLite    │
+│             │  Telemetry, Inference,   │              │
+│  - /proc    │  Commands                │  - SQLite    │
 │  - /sys     │                          │  - REST API  │
-│  - ONNX RT  │                          │              │
+│  - ONNX RT  │                          │  - TCP Cmd   │
 └─────────────┘                          └──────┬───────┘
                                                  │
                                     ┌────────────▼────────────┐
                                     │     React Dashboard     │
-                                    │  - Node overview        │
-                                    │  - Telemetry charts     │
+                                    │  - Cluster overview     │
+                                    │  - Node grid (search)   │
+                                    │  - Interactive charts   │
+                                    │  - Node control (tabs)  │
+                                    │  - Dark/Light theme     │
                                     └─────────────────────────┘
 ```
 

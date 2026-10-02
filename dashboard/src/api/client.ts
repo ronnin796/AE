@@ -60,3 +60,13 @@ export async function shutdownNode(nodeId: string) {
   const response = await api.post(`/nodes/${nodeId}/shutdown`);
   return response.data;
 }
+
+export async function disconnectNode(nodeId: string) {
+  const response = await api.post(`/nodes/${nodeId}/disconnect`);
+  return response.data;
+}
+
+export async function reconnectNode(nodeId: string) {
+  const response = await api.post(`/nodes/${nodeId}/reconnect`);
+  return response.data;
+}

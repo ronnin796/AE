@@ -1,22 +1,29 @@
 interface StatusBadgeProps {
   status: "online" | "offline" | "degraded" | "maintenance";
   className?: string;
+  size?: "sm" | "md" | "lg";
+  showDot?: boolean;
 }
 
-export default function StatusBadge({ status, className }: StatusBadgeProps) {
-  const statusStyles: Record<string, string> = {
-    online: "bg-green-100 text-green-800 border-green-300",
-    offline: "bg-red-100 text-red-800 border-red-300",
-    degraded: "bg-yellow-100 text-yellow-800 border-yellow-300",
-    maintenance: "bg-blue-100 text-blue-800 border-blue-300",
+export default function StatusBadge({ status, className, size = "md", showDot = true }: StatusBadgeProps) {
+  const sizeStyles = {
+    sm: { padding: "0.125rem 0.375rem", fontSize: "0.625rem", gap: "0.25rem" },
+    md: { padding: "0.25rem 0.625rem", fontSize: "0.75rem", gap: "0.375rem" },
+    lg: { padding: "0.375rem 0.875rem", fontSize: "0.875rem", gap: "0.5rem" },
   };
 
-  const style = statusStyles[status] || statusStyles.offline;
+  const style = sizeStyles[size];
 
   return (
     <span
-      className={`px-3 py-1 rounded-full text-xs font-semibold border ${style} ${className || ""}`}
+      className={`status-badge status-${status} ${className || ""}`}
+      style={{
+        ...style,
+        display: "inline-flex",
+        alignItems: "center",
+      } as React.CSSProperties}
     >
+      {showDot && <span className={`status-dot ${status}`} style={{ width: size === "sm" ? 5 : size === "lg" ? 10 : 8, height: size === "sm" ? 5 : size === "lg" ? 10 : 8 }} />}
       {status.toUpperCase()}
     </span>
   );
