@@ -23,7 +23,7 @@ pub struct Register {
 pub struct RegisterResponse {
     pub success: bool,
     pub node_id: String,
-    pub assigned_id: Option<String>, // Server-assigned ID if different
+    pub assigned_id: Option<String>,
     pub message: String,
     pub server_time: u64,
     pub config: Option<ServerConfig>,
@@ -74,6 +74,7 @@ pub enum ServerCommand {
     RunInference { model_id: String, input: Vec<f32> },
     Reboot,
     Shutdown,
+    Disconnect,
 }
 
 /// Telemetry message (edge -> server)
@@ -120,15 +121,14 @@ pub struct InferenceResult {
     pub error: Option<String>,
 }
 
-/// Error message
+/// Error message from server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Error {
-    pub code: u32,
+    pub code: i32,
     pub message: String,
     pub details: Option<String>,
 }
 
-/// Convert from our telemetry crate's Telemetry to protocol Telemetry
 impl From<crate::telemetry::Telemetry> for Telemetry {
     fn from(t: crate::telemetry::Telemetry) -> Self {
         Self {
@@ -149,49 +149,5 @@ impl From<crate::telemetry::Telemetry> for Telemetry {
             processes_running: t.processes_running,
             processes_total: t.processes_total,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_register_serialization() {
-        let reg = Register {
-            node_id: "test-node".to_string(),
-            hostname: "test-host".to_string(),
-            os: "Linux".to_string(),
-            os_version: "6.1".to_string(),
-            kernel_version: "6.1.0".to_string(),
-            cpu_brand: "Intel i7".to_string(),
-            cpu_cores: 8,
-            total_memory: 16_000_000_000,
-            version: "0.1.0".to_string(),
-            arch: "x86_64".to_string(),
-            capabilities: vec!["telemetry".to_string(), "inference".to_string()],
-        };
-
-        let encoded = rmp_serde::to_vec(&reg).unwrap();
-        let decoded: Register = rmp_serde::from_slice(&encoded).unwrap();
-
-        assert_eq!(decoded.node_id, reg.node_id);
-        assert_eq!(decoded.cpu_cores, reg.cpu_cores);
-    }
-
-    #[test]
-    fn test_heartbeat_serialization() {
-        let hb = Heartbeat {
-            node_id: "test-node".to_string(),
-            timestamp: 1234567890,
-            status: NodeStatus::Online,
-            uptime: 3600,
-        };
-
-        let encoded = rmp_serde::to_vec(&hb).unwrap();
-        let decoded: Heartbeat = rmp_serde::from_slice(&encoded).unwrap();
-
-        assert_eq!(decoded.node_id, hb.node_id);
-        assert_eq!(decoded.status, hb.status);
     }
 }

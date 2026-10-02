@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::node::NodeIdentity;
 use crate::protocol::{encode_envelope, Envelope, MessageType};
@@ -101,20 +101,32 @@ impl NetworkClient {
 
         // Send request
         let data = encode_envelope(&envelope)?;
-        debug!("Sending message type {:?}, {} bytes", envelope.msg_type, data.len());
-        debug!("First 10 bytes: {:?}", &data[..std::cmp::min(10, data.len())]);
+        info!("[AGENT] Sending message: type={:?}, seq={}, {} bytes", envelope.msg_type, envelope.sequence, data.len());
 
-        timeout(self.request_timeout, stream.write_all(&data))
+        // Write with error handling - clear stream on failure to trigger reconnect
+        let write_result = timeout(self.request_timeout, stream.write_all(&data))
             .await
-            .context("Write timeout")?
-            .context("Failed to write to stream")?;
+            .context("Write timeout");
+        
+        if let Err(e) = write_result {
+            // Clear the stream so next attempt will reconnect
+            *stream_guard = None;
+            error!("[AGENT] Write failed, clearing stream for reconnect: {}", e);
+            anyhow::bail!("Failed to write to stream: {}", e);
+        }
 
         // Read response
         let mut header = [0u8; 8];
-        timeout(self.request_timeout, stream.read_exact(&mut header))
+        let read_header_result = timeout(self.request_timeout, stream.read_exact(&mut header))
             .await
-            .context("Read header timeout")?
-            .context("Failed to read header")?;
+            .context("Read header timeout");
+        
+        if let Err(e) = read_header_result {
+            // Clear the stream so next attempt will reconnect
+            *stream_guard = None;
+            error!("[AGENT] Read header failed, clearing stream for reconnect: {}", e);
+            anyhow::bail!("Failed to read header: {}", e);
+        }
 
         // Verify magic bytes
         if &header[0..4] != crate::protocol::MAGIC_BYTES {
@@ -130,13 +142,19 @@ impl NetworkClient {
         }
 
         let mut payload = vec![0u8; len];
-        timeout(self.request_timeout, stream.read_exact(&mut payload))
+        let read_payload_result = timeout(self.request_timeout, stream.read_exact(&mut payload))
             .await
-            .context("Read payload timeout")?
-            .context("Failed to read payload")?;
+            .context("Read payload timeout");
+        
+        if let Err(e) = read_payload_result {
+            // Clear the stream so next attempt will reconnect
+            *stream_guard = None;
+            error!("[AGENT] Read payload failed, clearing stream for reconnect: {}", e);
+            anyhow::bail!("Failed to read payload: {}", e);
+        }
 
         let response: Envelope = crate::protocol::deserialize(&payload)?;
-        debug!("Received response type {:?}", response.msg_type);
+        info!("[AGENT] Received response: type={:?}, seq={}", response.msg_type, response.sequence);
 
         Ok(response)
     }
@@ -176,6 +194,7 @@ impl NetworkClient {
             payload,
         };
 
+        info!("[AGENT] Sending registration for node {}", identity.node_id);
         let response = self.send_request(envelope).await?;
 
         if response.msg_type != MessageType::RegisterResponse {
@@ -188,7 +207,7 @@ impl NetworkClient {
             anyhow::bail!("Registration failed: {}", register_response.message);
         }
 
-        info!("Registration successful: {}", register_response.message);
+        info!("[AGENT] Registration successful: {}", register_response.message);
         Ok(register_response)
     }
 
@@ -216,6 +235,7 @@ impl NetworkClient {
             payload,
         };
 
+        info!("[AGENT] Sending heartbeat for node {}", identity.node_id);
         let response = self.send_request(envelope).await?;
 
         if response.msg_type != MessageType::HeartbeatAck {
@@ -223,6 +243,7 @@ impl NetworkClient {
         }
 
         let ack: HeartbeatAck = crate::protocol::deserialize(&response.payload)?;
+        info!("[AGENT] Heartbeat ACK received: server_time={}, next_interval={:?}", ack.server_time, ack.next_heartbeat_interval);
         Ok(ack)
     }
 
@@ -244,6 +265,7 @@ impl NetworkClient {
             payload,
         };
 
+        info!("[AGENT] Sending telemetry: cpu={:?}%, mem={:?}%, temp={:?}°C", telemetry.cpu_usage, telemetry.memory_usage, telemetry.temperature);
         let response = self.send_request(envelope).await?;
 
         if response.msg_type == MessageType::Error {
@@ -251,6 +273,7 @@ impl NetworkClient {
             anyhow::bail!("Server error: {}", err.message);
         }
 
+        info!("[AGENT] Telemetry ACK received");
         Ok(())
     }
 

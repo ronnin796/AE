@@ -4,7 +4,7 @@ use tokio::time::interval;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use aetheredge_edge::{Config, NodeIdentity, NetworkClient, TelemetryCollector};
 
 #[derive(Parser, Debug)]
@@ -64,14 +64,19 @@ async fn main() -> Result<()> {
     let mut network_client = NetworkClient::new(server_addr, node_identity.clone());
 
     // Connect to server
+    info!("[AGENT] Connecting to server at {}", server_addr);
     network_client.connect().await
         .context("Failed to connect to server")?;
-    info!("Connected to server at {}", server_addr);
+    info!("[AGENT] Connected to server at {}", server_addr);
 
     // Register node
+    info!("[AGENT] Registering node {}", node_identity.node_id);
     let register_response = network_client.register(&node_identity).await
         .context("Node registration failed")?;
-    info!("Registration successful: {}", register_response.message);
+    info!("[AGENT] Registration successful: {}", register_response.message);
+    info!("[AGENT] Server config: heartbeat_interval={}s, telemetry_interval={}s", 
+          register_response.config.as_ref().map(|c| c.heartbeat_interval).unwrap_or(0),
+          register_response.config.as_ref().map(|c| c.telemetry_interval).unwrap_or(0));
 
     // Convert config telemetry to the correct type
     let telemetry_config = aetheredge_edge::TelemetryConfig {
@@ -92,9 +97,18 @@ async fn main() -> Result<()> {
             loop {
                 hb_interval.tick().await;
 
+                info!("[AGENT] Sending heartbeat for node {}", hb_identity.node_id);
                 match hb_client.heartbeat(&hb_identity).await {
-                    Ok(_) => debug!("Heartbeat sent successfully"),
-                    Err(e) => error!("Heartbeat failed: {}", e),
+                    Ok(ack) => {
+                        info!("[AGENT] Heartbeat ACK received: server_time={}, next_interval={:?}", ack.server_time, ack.next_heartbeat_interval);
+                        if !ack.commands.is_empty() {
+                            info!("[AGENT] Received commands: {:?}", ack.commands);
+                        }
+                    }
+                    Err(e) => {
+                        error!("[AGENT] Heartbeat failed: {}. Will retry on next interval.", e);
+                        // Connection error - next iteration will auto-reconnect
+                    }
                 }
             }
         });
@@ -113,12 +127,16 @@ async fn main() -> Result<()> {
 
                 match collector.collect(&tel_identity).await {
                     Ok(telemetry) => {
+                        info!("[AGENT] Collected telemetry: cpu={:?}%, mem={:?}%, temp={:?}°C", telemetry.cpu_usage, telemetry.memory_usage, telemetry.temperature);
                         if let Err(e) = tel_client.send_telemetry(&telemetry).await {
-                            error!("Failed to send telemetry: {}", e);
+                            error!("[AGENT] Failed to send telemetry: {}. Will retry on next interval.", e);
+                            // Connection error - next iteration will auto-reconnect
+                        } else {
+                            info!("[AGENT] Telemetry sent successfully");
                         }
                     }
                     Err(e) => {
-                        error!("Telemetry collection failed: {}", e);
+                        error!("[AGENT] Telemetry collection failed: {}", e);
                     }
                 }
             }
@@ -132,7 +150,7 @@ async fn main() -> Result<()> {
     info!("Shutting down daemon...");
 
     // Disconnect
-    // In a real implementation, we'd track handles to cancel them
+    network_client.disconnect().await;
 
     info!("Daemon stopped");
     Ok(())
