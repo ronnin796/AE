@@ -1,5 +1,4 @@
 import { TelemetryAggregated, TelemetryStats } from "../types";
-import { useTelemetryStats } from "../hooks/useTelemetry";
 
 interface TelemetryDashboardProps {
   nodeId: string;
@@ -13,8 +12,7 @@ const getFirstValue = (arr: (number | null)[] | undefined): number | null => {
 };
 
 export default function TelemetryDashboard({ nodeId, aggregatedTelemetry, stats }: TelemetryDashboardProps) {
-  const { data: fetchedStats, isLoading: statsLoading } = useTelemetryStats(nodeId);
-  const telemetryStats = stats || fetchedStats;
+  const telemetryStats = stats;
 
   if (!telemetryStats || telemetryStats.count === 0) {
     return (
@@ -92,9 +90,6 @@ export default function TelemetryDashboard({ nodeId, aggregatedTelemetry, stats 
         </div>
       )}
 
-      {statsLoading && !stats && (
-        <p className="loading" style={{ textAlign: 'center', color: 'var(--text-tertiary)', marginTop: '1rem' }}>Loading statistics...</p>
-      )}
     </div>
   );
 }

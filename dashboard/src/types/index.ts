@@ -11,7 +11,7 @@ export interface Node {
   version?: string;
   arch?: string;
   capabilities?: string[];
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | null;
   status: 'online' | 'offline' | 'degraded' | 'maintenance';
   last_seen: string;
   created_at: string;

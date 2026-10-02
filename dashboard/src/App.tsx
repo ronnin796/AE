@@ -11,6 +11,7 @@ import TelemetryDashboard from "./components/TelemetryDashboard";
 import StatusSummary from "./components/StatusSummary";
 import NodeDetail from "./components/NodeDetail";
 import DebugPanel from "./components/DebugPanel";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function AppContent() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -29,9 +30,8 @@ function AppContent() {
     50
   );
 
-  const { data: stats } = selectedNode
-    ? useTelemetryStats(selectedNode)
-    : { data: null };
+  // Node telemetry stats — always call hook unconditionally (enabled=false when no node)
+  const { data: stats } = useTelemetryStats(selectedNode || "");
 
   const { addEvent } = useDebug();
 
@@ -49,8 +49,7 @@ function AppContent() {
   };
 
   return (
-    <DebugProvider>
-      <div className="app">
+    <div className="app">
         <NavBar
           selectedNode={selectedNode}
           onNodeSelect={handleNodeSelect}
@@ -97,14 +96,17 @@ function AppContent() {
           </div>
         </main>
       </div>
-    </DebugProvider>
   );
 }
 
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <DebugProvider>
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
+      </DebugProvider>
     </ThemeProvider>
   );
 }
