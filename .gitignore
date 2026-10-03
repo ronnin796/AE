@@ -42,6 +42,4 @@ ml/models/
 
 # Rust
 /target/
-
-# Keep local Claude settings
-!.claude/settings.local.json
+.claude/
