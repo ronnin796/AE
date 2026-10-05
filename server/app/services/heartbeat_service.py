@@ -1,6 +1,6 @@
 """Heartbeat service for managing node liveness"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +8,11 @@ from sqlalchemy import select
 from app.models.node import Node, NodeStatus
 from app.schemas.node import NodeRegisterResponse, ServerConfig
 from app.services.database import get_node_by_id
+
+
+def _utcnow() -> datetime:
+    """Return current time as timezone-aware UTC."""
+    return datetime.now(timezone.utc)
 
 
 async def send_heartbeat(node_id: str, db: AsyncSession) -> dict:
@@ -20,14 +25,14 @@ async def send_heartbeat(node_id: str, db: AsyncSession) -> dict:
         }
 
     # Update last_seen
-    node.last_seen = datetime.utcnow()
+    node.last_seen = _utcnow()
     node.status = NodeStatus.ONLINE
 
     await db.commit()
 
     return {
         "success": True,
-        "server_time": int(datetime.utcnow().timestamp()),
+        "server_time": int(_utcnow().timestamp()),
         "next_heartbeat_interval": 10,
         "commands": [],
     }
@@ -43,7 +48,7 @@ async def check_node_health(node_id: str, db: AsyncSession) -> dict:
         }
 
     timeout_seconds = 30
-    if (datetime.utcnow() - node.last_seen).total_seconds() > timeout_seconds:
+    if (_utcnow() - node.last_seen).total_seconds() > timeout_seconds:
         node.status = NodeStatus.OFFLINE
         await db.commit()
         return {

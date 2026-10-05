@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -147,10 +147,10 @@ async def test_mark_offline_nodes(async_session):
     """Test marking nodes offline based on timeout"""
     from app.services.database import get_node_by_id
 
-    # Create nodes with different last_seen times
-    import time
-    old_time = int(datetime.utcnow().timestamp()) - 60  # 60 seconds ago
-    recent_time = int(datetime.utcnow().timestamp()) - 5  # 5 seconds ago
+    # Create nodes with different last_seen times (timezone-aware UTC)
+    now = datetime.now(timezone.utc)
+    old_time = now - timedelta(seconds=60)  # 60 seconds ago
+    recent_time = now - timedelta(seconds=5)  # 5 seconds ago
 
     # Node 1: old last_seen (should be marked offline with 30s timeout)
     node1 = Node(
@@ -158,7 +158,7 @@ async def test_mark_offline_nodes(async_session):
         hostname="old-host",
         os="Linux",
         status=NodeStatus.ONLINE,
-        last_seen=datetime.utcfromtimestamp(old_time),
+        last_seen=old_time,
     )
     async_session.add(node1)
 
@@ -168,7 +168,7 @@ async def test_mark_offline_nodes(async_session):
         hostname="recent-host",
         os="Linux",
         status=NodeStatus.ONLINE,
-        last_seen=datetime.utcfromtimestamp(recent_time),
+        last_seen=recent_time,
     )
     async_session.add(node2)
 
@@ -178,7 +178,7 @@ async def test_mark_offline_nodes(async_session):
         hostname="offline-host",
         os="Linux",
         status=NodeStatus.OFFLINE,
-        last_seen=datetime.utcfromtimestamp(old_time),
+        last_seen=old_time,
     )
     async_session.add(node3)
 
@@ -207,14 +207,15 @@ async def test_mark_offline_nodes_custom_timeout(async_session):
     """Test mark_offline_nodes with custom timeout"""
     from app.services.database import get_node_by_id
 
-    # Create node with last_seen 100 seconds ago
-    old_time = int(datetime.utcnow().timestamp()) - 100
+    # Create node with last_seen 100 seconds ago (timezone-aware UTC)
+    now = datetime.now(timezone.utc)
+    old_time = now - timedelta(seconds=100)
     node = Node(
         node_id="test-node-custom-timeout",
         hostname="custom-timeout-host",
         os="Linux",
         status=NodeStatus.ONLINE,
-        last_seen=datetime.utcfromtimestamp(old_time),
+        last_seen=old_time,
     )
     async_session.add(node)
     await async_session.commit()

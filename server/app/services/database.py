@@ -1,6 +1,6 @@
 """Database service layer for nodes and telemetry"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,11 @@ from app.models.node import Node, NodeStatus
 from app.models.telemetry import Telemetry
 from app.schemas.node import NodeRegister, NodeUpdate, NodeResponse, NodeListResponse
 from app.schemas.telemetry import TelemetryCreate, TelemetryQuery, TelemetryAggregated, TelemetryStats
+
+
+def _utcnow() -> datetime:
+    """Return current time as timezone-aware UTC."""
+    return datetime.now(timezone.utc)
 
 
 async def get_node_by_id(node_id: str, db: AsyncSession) -> Optional[Node]:
@@ -139,7 +144,7 @@ async def add_telemetry(telemetry_data: TelemetryCreate, db: AsyncSession) -> Te
     db.add(telemetry)
 
     # Update node last_seen and status
-    node.last_seen = datetime.utcnow()
+    node.last_seen = _utcnow()
     node.status = NodeStatus.ONLINE
 
     await db.commit()

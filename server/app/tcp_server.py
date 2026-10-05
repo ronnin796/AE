@@ -29,9 +29,14 @@ from app.protocol import (
 
 from app.services.database import create_node, get_node_by_id, add_telemetry
 from app.schemas.telemetry import TelemetryCreate
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    """Return current time as timezone-aware UTC."""
+    return datetime.now(timezone.utc)
 
 
 class SimpleTCPServer:
@@ -176,7 +181,7 @@ class SimpleTCPServer:
             async with async_session_maker() as db:
                 node = await get_node_by_id(heartbeat_data.node_id, db)
                 if node:
-                    node.last_seen = datetime.utcnow()
+                    node.last_seen = _utcnow()
                     node.status = NodeStatus.ONLINE
                     await db.commit()
                     logger.info(f"[TCP] Node {heartbeat_data.node_id} status updated to ONLINE")
@@ -261,7 +266,7 @@ class SimpleTCPServer:
                     existing_node.arch = register_data.arch
                     existing_node.capabilities = capabilities_json
                     existing_node.status = NodeStatus.ONLINE
-                    existing_node.last_seen = datetime.utcnow()
+                    existing_node.last_seen = _utcnow()
                     # Update intervals from server config
                     existing_node.heartbeat_interval = server_config.heartbeat_interval
                     existing_node.telemetry_interval = server_config.telemetry_interval
@@ -303,7 +308,7 @@ class SimpleTCPServer:
                     node_id=node_id,
                     assigned_id=assigned_id,
                     message=message,
-                    server_time=int(datetime.utcnow().timestamp()),
+                    server_time=int(_utcnow().timestamp()),
                     config=server_config,
                 )
 

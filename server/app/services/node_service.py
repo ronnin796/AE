@@ -10,6 +10,11 @@ from app.schemas.node import NodeRegister, NodeRegisterResponse, ServerConfig
 from app.services.database import create_node as db_create_node, get_node_by_id, update_node as db_update_node
 
 
+def _utcnow() -> datetime:
+    """Return current time as timezone-aware UTC."""
+    return datetime.now(timezone.utc)
+
+
 async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRegisterResponse:
     """Register a new node or update existing"""
     existing_node = await get_node_by_id(register_data.node_id, db)
@@ -26,7 +31,7 @@ async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRe
         existing_node.version = register_data.version
         existing_node.arch = register_data.arch
         existing_node.status = NodeStatus.ONLINE
-        existing_node.last_seen = datetime.utcnow()
+        existing_node.last_seen = _utcnow()
         # Set default intervals (can be overridden by TCP registration)
         existing_node.heartbeat_interval = 10
         existing_node.telemetry_interval = 2
@@ -39,7 +44,7 @@ async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRe
             node_id=existing_node.node_id,
             assigned_id=str(existing_node.id),
             message="Node updated successfully",
-            server_time=int(datetime.utcnow().timestamp()),
+            server_time=int(_utcnow().timestamp()),
             config=ServerConfig(),
         )
     else:
@@ -56,7 +61,7 @@ async def register_node(register_data: NodeRegister, db: AsyncSession) -> NodeRe
             node_id=node.node_id,
             assigned_id=str(node.id),
             message="Node registered successfully",
-            server_time=int(datetime.utcnow().timestamp()),
+            server_time=int(_utcnow().timestamp()),
             config=ServerConfig(),
         )
 
@@ -68,7 +73,7 @@ async def update_node_status(node_id: str, status: NodeStatus, db: AsyncSession)
         raise ValueError(f"Node {node_id} not found")
 
     node.status = status
-    node.last_seen = datetime.utcnow()
+    node.last_seen = _utcnow()
 
     await db.commit()
     await db.refresh(node)
@@ -85,8 +90,7 @@ async def mark_offline_nodes(timeout_seconds: int = 30, db: AsyncSession = None)
 
 
 async def _mark_offline_nodes_internal(timeout_seconds: int, db: AsyncSession) -> int:
-    from datetime import timezone
-    threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+    threshold = _utcnow() - timedelta(seconds=timeout_seconds)
 
     result = await db.execute(
         select(Node).where(

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,6 +63,9 @@ app.include_router(telemetry.router, prefix="/api/v1/telemetry", tags=["telemetr
 # Track TCP server task
 tcp_server_task: asyncio.Task = None
 
+# Track heartbeat monitor task
+heartbeat_monitor_task: asyncio.Task = None
+
 
 @app.get("/", summary="Root endpoint")
 async def root() -> dict:
@@ -72,6 +75,32 @@ async def root() -> dict:
 @app.get("/health", summary="Health check endpoint")
 async def health() -> dict:
     return {"status": "ok", "uptime": 0}
+
+
+async def start_heartbeat_monitor():
+    """Start heartbeat monitoring task that checks node health periodically"""
+    logger.info("Starting heartbeat monitor task...")
+
+    async def monitor():
+        while True:
+            try:
+                # Check all online nodes for heartbeat timeout
+                from app.database import async_session_maker
+                async with async_session_maker() as db:
+                    from app.services.node_service import mark_offline_nodes
+                    # Mark nodes offline if they haven't sent heartbeat in 30 seconds (default timeout)
+                    count = await mark_offline_nodes(30, db)
+                    if count > 0:
+                        logger.info(f"Marked {count} nodes as OFFLINE due to heartbeat timeout")
+
+                await asyncio.sleep(10)  # Check every 10 seconds
+            except Exception as e:
+                logger.error(f"Heartbeat monitor error: {e}")
+                await asyncio.sleep(10)  # Wait before retrying
+
+    global heartbeat_monitor_task
+    heartbeat_monitor_task = asyncio.create_task(monitor())
+    logger.info("Heartbeat monitor task started")
 
 
 @app.on_event("startup")
@@ -84,11 +113,16 @@ async def startup_event():
     # Start TCP server in background
     global tcp_server_task
     tcp_server_task = asyncio.create_task(start_tcp_server())
-    
+
+    # Start heartbeat monitor in background
+    global heartbeat_monitor_task
+    heartbeat_monitor_task = asyncio.create_task(start_heartbeat_monitor())
+
     # Give the TCP server a moment to start and bind to the port
     await asyncio.sleep(0.5)
-    
+
     logger.info("TCP server started")
+    logger.info("Heartbeat monitor started")
 
 
 @app.on_event("shutdown")
@@ -104,6 +138,15 @@ async def shutdown_event():
         except asyncio.CancelledError:
             pass
         logger.info("TCP server stopped")
+
+    # Stop heartbeat monitor
+    if heartbeat_monitor_task and not heartbeat_monitor_task.done():
+        heartbeat_monitor_task.cancel()
+        try:
+            await heartbeat_monitor_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Heartbeat monitor stopped")
 
     await close_db()
     logger.info("Database connections closed")
