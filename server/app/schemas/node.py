@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.telemetry import TelemetryLatest
+
 
 class NodeBase(BaseModel):
     """Base node schema"""
@@ -99,6 +101,7 @@ class NodeResponse(NodeBase):
     updated_at: datetime
     heartbeat_interval: int
     telemetry_interval: int
+    latest_telemetry: Optional[TelemetryLatest] = None
 
 
 class NodeListResponse(BaseModel):
@@ -111,3 +114,4 @@ class NodeListResponse(BaseModel):
 
 # Update forward references
 NodeRegisterResponse.model_rebuild()
+NodeResponse.model_rebuild()

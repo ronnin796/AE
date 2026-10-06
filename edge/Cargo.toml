@@ -1,7 +1,7 @@
 # ORS - Edge Daemon
 [package]
 name = "aetheredge-edge"
-version = "0.1.0"
+version = "2.0.23"
 edition = "2021"
 description = "AetherEdge Rust Edge Daemon"
 license = "MIT"

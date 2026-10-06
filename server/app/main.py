@@ -42,7 +42,7 @@ logger = logging.getLogger("aetheredge-server")
 app = FastAPI(
     title="AetherEdge Server",
     description="FastAPI backend for AetherEdge distributed edge AI system",
-    version="0.1.0",
+    version="2.0.23",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -59,6 +59,8 @@ app.add_middleware(
 # Include API routers
 app.include_router(nodes.router, prefix="/api/v1/nodes", tags=["nodes"])
 app.include_router(telemetry.router, prefix="/api/v1/telemetry", tags=["telemetry"])
+from .api.debug import router as debug_router
+app.include_router(debug_router, prefix="/api/v1", tags=["debug"])
 
 # Track TCP server task
 tcp_server_task: asyncio.Task = None
@@ -69,7 +71,7 @@ heartbeat_monitor_task: asyncio.Task = None
 
 @app.get("/", summary="Root endpoint")
 async def root() -> dict:
-    return {"message": "AetherEdge Server is running", "version": "0.1.0"}
+    return {"message": "AetherEdge Server is running", "version": "2.0.23"}
 
 
 @app.get("/health", summary="Health check endpoint")

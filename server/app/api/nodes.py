@@ -4,10 +4,11 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models.node import Node, NodeStatus
+from app.models.telemetry import Telemetry
 from app.schemas.node import (
     NodeBase,
     NodeListResponse,
@@ -17,6 +18,7 @@ from app.schemas.node import (
     NodeResponse,
     ServerConfig,
 )
+from app.schemas.telemetry import TelemetryLatest
 from app.services.node_service import (
     register_node,
     update_node_status,
@@ -29,10 +31,76 @@ from app.services.heartbeat_service import (
     get_offline_nodes,
 )
 from app.tcp_server import send_command_to_node, _connected_clients
+from app.services.database import get_latest_telemetry_for_all_nodes, get_latest_telemetry_for_node, get_node_by_id
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+async def _enrich_node_with_latest_telemetry(node: Node, db: AsyncSession, latest_telemetry_map: Dict[int, Telemetry] = None) -> NodeResponse:
+    """Enrich a node with its latest telemetry data."""
+    node_response = NodeResponse.from_orm(node)
+    
+    if latest_telemetry_map and node.id in latest_telemetry_map:
+        telemetry = latest_telemetry_map[node.id]
+        node_response.latest_telemetry = _telemetry_to_latest(telemetry, node.node_id)
+    elif not latest_telemetry_map:
+        # Fetch individually if no map provided
+        telemetry = await get_latest_telemetry_for_node(node.node_id, db)
+        if telemetry:
+            node_response.latest_telemetry = _telemetry_to_latest(telemetry, node.node_id)
+    
+    return node_response
+
+
+def _telemetry_to_latest(telemetry: Telemetry, node_id_str: str) -> TelemetryLatest:
+    """Convert database Telemetry model to TelemetryLatest schema."""
+    import json
+    
+    cpu_per_core = None
+    if telemetry.cpu_per_core:
+        try:
+            cpu_per_core = json.loads(telemetry.cpu_per_core)
+        except (json.JSONDecodeError, TypeError):
+            cpu_per_core = None
+
+    temperatures = None
+    if telemetry.temperatures:
+        try:
+            temperatures = json.loads(telemetry.temperatures)
+        except (json.JSONDecodeError, TypeError):
+            temperatures = None
+
+    # Calculate age in seconds - handle both naive and aware datetimes
+    age_seconds = None
+    if telemetry.timestamp:
+        ts = telemetry.timestamp
+        # If timestamp is naive, assume UTC
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        age_seconds = int((now - ts).total_seconds())
+
+    return TelemetryLatest(
+        node_id=node_id_str,
+        timestamp=int(telemetry.timestamp.timestamp()),
+        cpu_usage=telemetry.cpu_usage,
+        cpu_per_core=cpu_per_core,
+        memory_usage=telemetry.memory_usage,
+        memory_total=telemetry.memory_total,
+        memory_available=telemetry.memory_available,
+        memory_used=telemetry.memory_used,
+        temperature=telemetry.temperature,
+        temperatures=temperatures,
+        uptime=telemetry.uptime,
+        load_1=telemetry.load_1,
+        load_5=telemetry.load_5,
+        load_15=telemetry.load_15,
+        processes_running=telemetry.processes_running,
+        processes_total=telemetry.processes_total,
+        age_seconds=age_seconds,
+    )
 
 
 @router.post("/register", response_model=NodeRegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -72,7 +140,7 @@ async def get_node_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Node {node_id} not found",
         )
-    return NodeResponse.from_orm(node)
+    return await _enrich_node_with_latest_telemetry(node, db)
 
 
 @router.get("/", response_model=NodeListResponse)
@@ -84,9 +152,31 @@ async def list_nodes_endpoint(
     """
     List all registered nodes with pagination.
     """
-    from app.services.database import list_nodes
+    from app.services.database import list_nodes, get_latest_telemetry_for_all_nodes
+    
+    # Get paginated nodes
     result = await list_nodes(page, page_size, db)
-    return result
+    
+    # Get latest telemetry for all nodes in a single query
+    latest_telemetry_map = await get_latest_telemetry_for_all_nodes(db)
+    
+    # Enrich nodes with latest telemetry
+    enriched_nodes = []
+    for node_response in result["nodes"]:
+        # We need to get the node object to access its ID
+        node_obj = await get_node_by_id(node_response.node_id, db)
+        if node_obj:
+            enriched = await _enrich_node_with_latest_telemetry(node_obj, db, latest_telemetry_map)
+            enriched_nodes.append(enriched)
+        else:
+            enriched_nodes.append(node_response)
+    
+    return NodeListResponse(
+        nodes=enriched_nodes,
+        total=result["total"],
+        page=result["page"],
+        page_size=result["page_size"],
+    )
 
 
 @router.get("/status/online", response_model=List[NodeResponse])
@@ -97,7 +187,11 @@ async def get_online_nodes_endpoint(
     Get list of currently online nodes.
     """
     nodes = await get_online_nodes(db)
-    return [NodeResponse.from_orm(node) for node in nodes]
+    latest_telemetry_map = await get_latest_telemetry_for_all_nodes(db)
+    enriched = []
+    for node in nodes:
+        enriched.append(await _enrich_node_with_latest_telemetry(node, db, latest_telemetry_map))
+    return enriched
 
 
 @router.get("/status/offline", response_model=List[NodeResponse])
@@ -108,7 +202,11 @@ async def get_offline_nodes_endpoint(
     Get list of offline nodes.
     """
     nodes = await get_offline_nodes(db)
-    return [NodeResponse.from_orm(node) for node in nodes]
+    latest_telemetry_map = await get_latest_telemetry_for_all_nodes(db)
+    enriched = []
+    for node in nodes:
+        enriched.append(await _enrich_node_with_latest_telemetry(node, db, latest_telemetry_map))
+    return enriched
 
 
 @router.get("/debug/registry", response_model=dict)
@@ -352,4 +450,118 @@ async def delete_node(
         "success": True,
         "node_id": node_id,
         "message": f"Node {node_id} deleted permanently",
+    }
+
+
+@router.get("/debug/events", response_model=dict)
+async def debug_events(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict:
+    """
+    Debug endpoint: Get recent system events (registrations, heartbeats, telemetry, status changes).
+    """
+    from app.models.node import Node
+    from app.models.telemetry import Telemetry
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, desc, func
+
+    now = datetime.now(timezone.utc)
+    events = []
+
+    # Get recent node registrations/updates (last 24 hours)
+    node_query = (
+        select(Node)
+        .where(Node.created_at >= now - timedelta(hours=24))
+        .order_by(desc(Node.created_at))
+        .limit(limit)
+    )
+    nodes_result = await db.execute(node_query)
+    nodes = nodes_result.scalars().all()
+
+    for node in nodes:
+        events.append({
+            "id": f"node_created_{node.id}",
+            "timestamp": node.created_at.isoformat(),
+            "type": "connect",
+            "node_id": node.node_id,
+            "message": f"Node registered: {node.hostname} ({node.node_id})",
+        })
+
+    # Get recent heartbeats (nodes with recent last_seen)
+    hb_query = (
+        select(Node)
+        .where(Node.last_seen >= now - timedelta(hours=24))
+        .order_by(desc(Node.last_seen))
+        .limit(limit)
+    )
+    hb_result = await db.execute(hb_query)
+    hb_nodes = hb_result.scalars().all()
+
+    for node in hb_nodes:
+        # Skip if we already added a connect event for this time
+        if node.created_at != node.last_seen:
+            events.append({
+                "id": f"heartbeat_{node.id}_{int(node.last_seen.timestamp())}",
+                "timestamp": node.last_seen.isoformat(),
+                "type": "heartbeat",
+                "node_id": node.node_id,
+                "message": f"Heartbeat received from {node.hostname}",
+            })
+
+    # Get recent telemetry
+    tel_query = (
+        select(Telemetry)
+        .where(Telemetry.timestamp >= now - timedelta(hours=24))
+        .order_by(desc(Telemetry.timestamp))
+        .limit(limit)
+    )
+    tel_result = await db.execute(tel_query)
+    telemetry_list = tel_result.scalars().all()
+
+    # Get node info for telemetry
+    node_ids = {t.node_id for t in telemetry_list}
+    node_map = {}
+    if node_ids:
+        node_q = select(Node).where(Node.id.in_(node_ids))
+        node_r = await db.execute(node_q)
+        node_map = {n.id: n for n in node_r.scalars().all()}
+
+    for tel in telemetry_list:
+        node = node_map.get(tel.node_id)
+        if node:
+            events.append({
+                "id": f"telemetry_{tel.id}",
+                "timestamp": tel.timestamp.isoformat(),
+                "type": "telemetry",
+                "node_id": node.node_id,
+                "message": f"Telemetry: CPU={tel.cpu_usage:.1f}% MEM={tel.memory_usage:.1f}%" 
+                          + (f" TEMP={tel.temperature:.1f}°C" if tel.temperature else ""),
+            })
+
+    # Get status changes (nodes that went offline)
+    offline_query = (
+        select(Node)
+        .where(Node.status == "offline", Node.updated_at >= now - timedelta(hours=24))
+        .order_by(desc(Node.updated_at))
+        .limit(limit)
+    )
+    offline_result = await db.execute(offline_query)
+    offline_nodes = offline_result.scalars().all()
+
+    for node in offline_nodes:
+        events.append({
+            "id": f"disconnect_{node.id}",
+            "timestamp": node.updated_at.isoformat(),
+            "type": "disconnect",
+            "node_id": node.node_id,
+            "message": f"Node marked offline: {node.hostname}",
+        })
+
+    # Sort events by timestamp, newest first
+    events.sort(key=lambda e: e["timestamp"], reverse=True)
+    
+    return {
+        "events": events[:limit],
+        "total": len(events),
     }

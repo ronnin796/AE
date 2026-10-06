@@ -6,8 +6,8 @@ export default function DebugPanel() {
   const [autoScroll, setAutoScroll] = useState(true);
   const [filter, setFilter] = useState<string>("all");
 
-  const filteredEvents = filter === "all" 
-    ? events 
+  const filteredEvents = filter === "all"
+    ? events
     : events.filter(e => e.type === filter);
 
   const getEventColor = (type: string) => {
@@ -22,33 +22,33 @@ export default function DebugPanel() {
     }
   };
 
-  const getEventIcon = (type: string) => {
+  const getEventTypeLabel = (type: string) => {
     switch (type) {
-      case "connect": return "🔌";
-      case "disconnect": return "🔌";
-      case "heartbeat": return "💓";
-      case "telemetry": return "📊";
-      case "command": return "⚡";
-      case "error": return "⚠️";
-      default: return "📝";
+      case "connect": return "CONN";
+      case "disconnect": return "DISC";
+      case "heartbeat": return "BEAT";
+      case "telemetry": return "TELE";
+      case "command": return "CMD";
+      case "error": return "ERR";
+      default: return type.toUpperCase().substring(0, 4);
     }
   };
 
   return (
-    <div className="card debug-panel" style={{ maxHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-      <header className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h3 className="card-title" style={{ marginBottom: 0 }}>Debug Panel</h3>
+    <div className="panel debug-panel" style={{ maxHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+      <header className="panel-header">
+        <h3 className="panel-title">Debug Panel</h3>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}>
-            <input 
-              type="checkbox" 
-              checked={autoScroll} 
-              onChange={(e) => setAutoScroll(e.target.checked)} 
+            <input
+              type="checkbox"
+              checked={autoScroll}
+              onChange={(e) => setAutoScroll(e.target.checked)}
             />
             Auto-scroll
           </label>
-          <select 
-            className="input select" 
+          <select
+            className="input select"
             style={{ width: 'auto', minWidth: '120px', fontSize: '0.75rem' }}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -67,11 +67,11 @@ export default function DebugPanel() {
         </div>
       </header>
 
-      <div 
-        className="debug-events" 
-        style={{ 
-          flex: 1, 
-          overflowY: 'auto', 
+      <div
+        className="debug-events"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
           maxHeight: '300px',
           fontSize: '0.75rem',
           fontFamily: 'var(--font-mono)',
@@ -85,11 +85,11 @@ export default function DebugPanel() {
           </div>
         ) : (
           filteredEvents.slice().reverse().map((event) => (
-            <div 
+            <div
               key={event.id}
               className="debug-event"
-              style={{ 
-                padding: '0.375rem 0.5rem', 
+              style={{
+                padding: '0.375rem 0.5rem',
                 borderBottom: '1px solid var(--border-primary)',
                 display: 'flex',
                 gap: '0.5rem',
@@ -99,10 +99,10 @@ export default function DebugPanel() {
               <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap', minWidth: '80px' }}>
                 {new Date(event.timestamp).toLocaleTimeString()}
               </span>
-              <span style={{ color: getEventColor(event.type), whiteSpace: 'nowrap', minWidth: '16px' }}>
-                {getEventIcon(event.type)}
+              <span style={{ color: getEventColor(event.type), whiteSpace: 'nowrap', minWidth: '24px', textAlign: 'center', display: 'inline-block' }}>
+                [{getEventTypeLabel(event.type)}]
               </span>
-              <span style={{ color: 'var(--accent-primary)', whiteSpace: 'nowrap', minWidth: '80px' }}>
+              <span style={{ color: 'var(--accent-primary)', whiteSpace: 'nowrap', minWidth: '80px', display: 'inline-block' }}>
                 {event.node_id}
               </span>
               <span style={{ color: 'var(--text-secondary)', flex: 1 }}>

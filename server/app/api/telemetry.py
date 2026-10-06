@@ -16,9 +16,11 @@ from app.schemas.telemetry import (
     TelemetryQuery,
     TelemetryAggregated,
     TelemetryStats,
+    TelemetrySummary,
 )
 from app.services.database import (
     add_telemetry,
+    get_all_nodes_telemetry_summary as db_get_all_nodes_telemetry_summary,
     get_telemetry,
     get_telemetry_for_node,
     get_telemetry_stats,
@@ -210,3 +212,20 @@ async def get_aggregated_telemetry(
         temperature=[t.temperature for t in sampled],
         load_1=[t.load_1 for t in sampled],
     )
+
+
+@router.get("/summary/all", response_model=TelemetrySummary)
+async def get_all_nodes_telemetry_summary(
+    db: AsyncSession = Depends(get_db),
+) -> TelemetrySummary:
+    """
+    Get telemetry summary for all nodes in a single request.
+    Efficient for populating NodeCard telemetry previews in the node list.
+    """
+    summary = await db_get_all_nodes_telemetry_summary(db)
+    # Convert to TelemetryStats objects
+    nodes_stats = {
+        node_id: TelemetryStats(**stats)
+        for node_id, stats in summary.items()
+    }
+    return TelemetrySummary(nodes=nodes_stats)

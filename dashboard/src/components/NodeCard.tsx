@@ -29,23 +29,66 @@ const formatRelativeTime = (dateString: string) => {
   return `${diffDays}d ago`;
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "online": return "online";
-    case "offline": return "offline";
-    case "degraded": return "degraded";
-    case "maintenance": return "maintenance";
-    default: return "offline";
+const getTelemetryState = (node: Node, stats: TelemetryStats | null | undefined) => {
+  const isOnline = node.status === "online";
+
+  // No stats available (not loaded or no telemetry in DB)
+  if (!stats || stats.count === 0) {
+    if (isOnline) {
+      return { state: 'waiting', label: 'WAITING', details: '' };
+    } else {
+      return { state: 'offline', label: 'OFFLINE', details: `Last seen: ${formatRelativeTime(node.last_seen)}` };
+    }
   }
+
+  // Has telemetry data - check freshness
+  if (stats.latest_timestamp) {
+    const latestTs = stats.latest_timestamp * 1000; // Convert to ms
+    const now = Date.now();
+    const ageMs = now - latestTs;
+    const ageSecs = Math.floor(ageMs / 1000);
+
+    // Consider telemetry stale if older than 3x telemetry interval (default 2s -> 6s threshold)
+    const telemetryInterval = node.telemetry_interval || 2;
+    const staleThreshold = telemetryInterval * 3 * 1000; // ms
+
+    if (ageMs > staleThreshold) {
+      return {
+        state: 'stale',
+        label: 'STALE',
+        details: `Last update: ${formatRelativeTimeFromSeconds(ageSecs)} ago`,
+        ageSecs
+      };
+    }
+
+    return {
+      state: 'live',
+      label: 'LIVE',
+      details: `Updated ${formatRelativeTimeFromSeconds(ageSecs)} ago`,
+      ageSecs
+    };
+  }
+
+  // Has stats but no timestamp (edge case)
+  return { state: 'live', label: 'LIVE', details: 'Data available' };
+};
+
+const formatRelativeTimeFromSeconds = (seconds: number) => {
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 };
 
 export default function NodeCard({ node, stats, isLoadingStats, onSelect }: NodeCardProps) {
-  const statusKey = getStatusColor(node.status);
-  const isOnline = node.status === "online";
+  const telemetryState = getTelemetryState(node, stats);
 
   return (
     <article
-      className={`node-card ${node.status}`}
+      className={`panel node-card ${node.status}`}
       onClick={() => onSelect(node.node_id)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(node.node_id); } }}
       tabIndex={0}
@@ -54,17 +97,11 @@ export default function NodeCard({ node, stats, isLoadingStats, onSelect }: Node
       data-node-id={node.node_id}
     >
       <header className="node-card-header">
-        <div className="node-card-title">
-          <div
-            className={`status-dot ${statusKey}`}
-            aria-hidden="true"
-          />
-          <h3 className="node-card-name" title={node.hostname || node.node_id}>
-            {node.hostname || node.node_id}
-          </h3>
-        </div>
-        <span className={`status-badge status-${node.status}`}>
-          {node.status.toUpperCase()}
+        <h3 className="node-card-name" title={node.hostname || node.node_id}>
+          {node.hostname || node.node_id}
+        </h3>
+        <span className={`status-label status-${node.status}`} style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginLeft: '0.75rem' }}>
+          {telemetryState.label}
         </span>
       </header>
 
@@ -75,19 +112,19 @@ export default function NodeCard({ node, stats, isLoadingStats, onSelect }: Node
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">OS</span>
-          <span className="node-card-field-value truncate">{node.os} {node.os_version || ""}</span>
+          <span className="node-card-field-value">{node.os} {node.os_version || ""}</span>
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">Kernel</span>
-          <span className="node-card-field-value truncate">{node.kernel_version || "N/A"}</span>
+          <span className="node-card-field-value">{node.kernel_version || "N/A"}</span>
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">Architecture</span>
-          <span className="node-card-field-value truncate">{node.arch || "N/A"}</span>
+          <span className="node-card-field-value">{node.arch || "N/A"}</span>
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">CPU</span>
-          <span className="node-card-field-value truncate">
+          <span className="node-card-field-value">
             {node.cpu_brand || "Unknown"} ({node.cpu_cores || "?"} cores)
           </span>
         </div>
@@ -97,7 +134,7 @@ export default function NodeCard({ node, stats, isLoadingStats, onSelect }: Node
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">AetherEdge Version</span>
-          <span className="node-card-field-value truncate">{node.version || "N/A"}</span>
+          <span className="node-card-field-value">{node.version || "N/A"}</span>
         </div>
         <div className="node-card-field">
           <span className="node-card-field-label">Status Since</span>
@@ -107,58 +144,66 @@ export default function NodeCard({ node, stats, isLoadingStats, onSelect }: Node
         </div>
       </div>
 
-      {(stats && stats.count > 0) && (
+      {!isLoadingStats && (
         <section className="node-card-telemetry" aria-label="Telemetry summary">
-          <h4 className="node-card-telemetry-title">Telemetry Summary</h4>
-          <div className="node-card-metrics" role="list" aria-label="Key metrics">
-            <div className="node-card-metric" role="listitem">
-              <div className="node-card-metric-value">
-                {stats.avg_cpu ? `${stats.avg_cpu.toFixed(1)}%` : "—"}
-              </div>
-              <div className="node-card-metric-label">Avg CPU</div>
-            </div>
-            <div className="node-card-metric" role="listitem">
-              <div className="node-card-metric-value">
-                {stats.max_cpu ? `${stats.max_cpu.toFixed(1)}%` : "—"}
-              </div>
-              <div className="node-card-metric-label">Peak CPU</div>
-            </div>
-            <div className="node-card-metric" role="listitem">
-              <div className="node-card-metric-value">
-                {stats.avg_memory ? `${stats.avg_memory.toFixed(1)}%` : "—"}
-              </div>
-              <div className="node-card-metric-label">Avg Memory</div>
-            </div>
-            <div className="node-card-metric" role="listitem">
-              <div className="node-card-metric-value">
-                {stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "—"}
-              </div>
-              <div className="node-card-metric-label">Avg Temp</div>
-            </div>
-          </div>
-        </section>
-      )}
+          <h4 className="node-card-telemetry-title">Telemetry</h4>
 
-      {isLoadingStats && (
-        <section className="node-card-telemetry" aria-label="Loading telemetry">
-          <div className="skeleton skeleton-text short" style={{ margin: '0 auto' }} />
-        </section>
-      )}
+          {telemetryState.state === 'live' && stats && (
+            <div className="node-card-metrics" role="list" aria-label="Key metrics">
+              <div className="node-card-metric" role="listitem">
+                <div className="node-card-metric-value">
+                  {stats.avg_cpu !== undefined ? `${stats.avg_cpu.toFixed(1)}%` : "—"}
+                </div>
+                <div className="node-card-metric-label">Avg CPU</div>
+              </div>
+              <div className="node-card-metric" role="listitem">
+                <div className="node-card-metric-value">
+                  {stats.avg_memory !== undefined ? `${stats.avg_memory.toFixed(1)}%` : "—"}
+                </div>
+                <div className="node-card-metric-label">Avg Memory</div>
+              </div>
+              <div className="node-card-metric" role="listitem">
+                <div className="node-card-metric-value">
+                  {stats.avg_temperature !== undefined ? `${stats.avg_temperature.toFixed(1)}°C` : "—"}
+                </div>
+                <div className="node-card-metric-label">Avg Temp</div>
+              </div>
+              <div className="node-card-metric" role="listitem">
+                <div className="node-card-metric-value">
+                  {stats.latest_timestamp !== undefined ? `${(Date.now() / 1000 - stats.latest_timestamp).toFixed(0)}s ago` : "—"}
+                </div>
+                <div className="node-card-metric-label">Last Update</div>
+              </div>
+            </div>
+          )}
 
-      {!stats && !isLoadingStats && (
-        <section className="node-card-telemetry" aria-label="No telemetry">
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-            No telemetry data yet
-          </p>
+          {telemetryState.state === 'stale' && stats && (
+            <p className="node-card-stale-notice" style={{ fontSize: '0.7rem', color: 'var(--accent-warning)', textAlign: 'center', marginTop: '0.5rem' }}>
+              STALE - {telemetryState.details}
+            </p>
+          )}
+
+          {telemetryState.state === 'waiting' && (
+            <p className="node-card-waiting" style={{ fontSize: '0.75rem', color: 'var(--accent-info)', textAlign: 'center' }}>
+              WAITING for first telemetry data
+            </p>
+          )}
+
+          {telemetryState.state === 'offline' && (
+            <p className="node-card-offline" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+              OFFLINE
+            </p>
+          )}
         </section>
       )}
 
       <footer className="node-card-footer">
         <div className="node-card-last-seen">
-          <span className={`status-dot ${statusKey}`} aria-hidden="true" />
+          <span className={`status-label status-${node.status}`} style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginRight: '0.5rem' }}>
+            {telemetryState.state === 'offline' ? 'OFFLINE' : 'ONLINE'}
+          </span>
           <span>Last seen: {formatRelativeTime(node.last_seen)}</span>
         </div>
-        <span className="node-card-view-hint">Click for details →</span>
       </footer>
     </article>
   );

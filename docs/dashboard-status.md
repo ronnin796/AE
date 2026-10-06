@@ -7,11 +7,17 @@
 - Heartbeat-based connection monitoring (online/offline/degraded/maintenance)
 - Node listing with pagination, search, filter, and sort
 - **Enhanced node cards** showing: hostname, node_id, OS, kernel, CPU, memory, version, last seen, status bar
+- **NodeCard Telemetry Preview**: Shows live telemetry (CPU, Memory, Temp, Load) with automatic state detection (Live/Stale/Waiting/Offline)
 - **Telemetry ingestion** (CPU, memory, temperature, load, uptime, processes)
 - **Telemetry API endpoints:**
   - `GET /telemetry/node/{node_id}` - raw telemetry history
   - `GET /telemetry/stats/{node_id}` - aggregated statistics
   - `GET /telemetry/aggregated/{node_id}` - sampled data for charts
+  - `GET /telemetry/summary/all` - **NEW v2.0.23**: telemetry stats for all nodes in single request
+- **Debug API endpoints (NEW v2.0.23):**
+  - `GET /debug/events` - system event stream (registrations, heartbeats, telemetry, disconnections)
+  - `GET /debug/stats` - system-wide statistics
+  - `GET /debug/connections` - active TCP connections
 - **Dashboard components:**
   - `NodeOverview` - summary stats (total/online/offline/degraded/maintenance) in sidebar
   - `NodeList` + `NodeCard` - clickable node cards with search/filter/sort
@@ -20,13 +26,22 @@
   - **`TelemetryCharts`** - **Full Recharts implementation** (CPU, Memory, Temperature, Load)
   - **`NodeDetail`** - **Tabbed interface** (Overview, Telemetry, System, Commands)
   - `NavBar` - navigation with theme toggle, node count, refresh
+  - **`DebugPanel`** - **NEW v2.0.23**: Real-time event stream with filtering, auto-scroll, backend integration
 - **Theme System:** Dark/Light mode with CSS variables, persisted to localStorage
 - **Responsive Layout:** Sidebar + main content, mobile-friendly
 - **Loading States:** Skeleton screens for all components
 - **Error Handling:** User-friendly error messages with retry
 - **Accessibility:** ARIA labels, semantic HTML, keyboard navigation
 
-### ✅ New in This Release
+### ✅ New in v2.0.23 (2026-10-05)
+- **NodeCard Telemetry Preview Fixed**: No more "No telemetry data" - now shows real telemetry with state-aware display (Live/Stale/Waiting/Offline)
+- **Efficient Telemetry Summary API**: Single `/telemetry/summary/all` call populates all NodeCards, avoiding N+1 query problem
+- **Debug Panel Backend Integration**: Connected to real system events via `/api/v1/debug/events` - shows registrations, heartbeats, telemetry receipts, disconnections
+- **Debug Panel Features**: Auto-scroll, event type filtering, clear events, real-time polling (5s interval)
+- **Telemetry Freshness Detection**: Automatically detects stale telemetry (>3x interval) and shows warning
+- **Version 2.0.23**: Consistent versioning across Rust edge, Python server, React dashboard, ML tooling
+
+### ✅ Previously Released Features
 - **Interactive Charts** (Recharts): CPU, Memory, Temperature, Load with tooltips
 - **Tabbed Node Detail View:** Overview, Telemetry (with charts), System, Commands
 - **Remote Node Commands:** Shutdown, Reboot, Update intervals via TCP

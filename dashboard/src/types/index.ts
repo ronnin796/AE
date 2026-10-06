@@ -67,3 +67,41 @@ export interface TelemetryStats {
   max_temperature?: number;
   latest_timestamp?: number;
 }
+
+export interface TelemetrySummary {
+  nodes: Record<string, TelemetryStats>;
+}
+
+export interface DebugEvent {
+  id: string;
+  timestamp: string;
+  type: 'connect' | 'disconnect' | 'heartbeat' | 'telemetry' | 'command' | 'error';
+  node_id: string;
+  message: string;
+}
+
+export interface DebugEventsResponse {
+  events: DebugEvent[];
+  total: number;
+  filters: {
+    limit: number;
+    since?: string;
+    event_types?: string[];
+    node_id?: string;
+  };
+}
+
+export interface DebugStats {
+  nodes: {
+    total: number;
+    by_status: Record<string, number>;
+  };
+  telemetry: {
+    total_points: number;
+    latest_per_node: Record<string, string | null>;
+  };
+  database: {
+    node_table_rows: number;
+    telemetry_table_rows: number;
+  };
+}

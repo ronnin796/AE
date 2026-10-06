@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -231,7 +231,7 @@ async def test_get_telemetry(async_session):
     # Get with time filter
     telemetry_list = await get_telemetry(
         node_id="test-node-get-tel",
-        start_time=datetime.fromtimestamp(base_time + 5),
+        start_time=datetime.fromtimestamp(base_time + 5, tz=timezone.utc),
         limit=10,
         db=async_session
     )

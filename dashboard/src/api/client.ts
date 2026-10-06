@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { TelemetrySummary, DebugEventsResponse, DebugStats } from '../types';
 
 const API_BASE = 'http://localhost:8080/api/v1';
 
@@ -51,6 +52,11 @@ export async function getTelemetryStats(nodeId: string) {
   return response.data;
 }
 
+export async function getAllNodesTelemetrySummary(): Promise<TelemetrySummary> {
+  const response = await api.get('/telemetry/summary/all');
+  return response.data;
+}
+
 export async function sendNodeCommand(nodeId: string, command: string, params: Record<string, any> = {}) {
   const response = await api.post(`/nodes/${nodeId}/command`, { command, params });
   return response.data;
@@ -78,5 +84,25 @@ export async function deleteNode(nodeId: string) {
 
 export async function debugNodeRegistry() {
   const response = await api.get('/nodes/debug/registry');
+  return response.data;
+}
+
+// Debug API
+export async function getDebugEvents(limit = 100, since?: string, eventTypes?: string[], nodeId?: string): Promise<DebugEventsResponse> {
+  const params: Record<string, any> = { limit };
+  if (since) params.since = since;
+  if (eventTypes && eventTypes.length > 0) params.event_types = eventTypes;
+  if (nodeId) params.node_id = nodeId;
+  const response = await api.get('/debug/events', { params });
+  return response.data;
+}
+
+export async function getDebugStats(): Promise<DebugStats> {
+  const response = await api.get('/debug/stats');
+  return response.data;
+}
+
+export async function getActiveConnections() {
+  const response = await api.get('/debug/connections');
   return response.data;
 }

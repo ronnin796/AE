@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
-import { Node } from "../types";
+import { Node, TelemetryStats } from "../types";
 import { useNodes, useOnlineNodes, useOfflineNodes } from "../hooks/useNodes";
+import { useAllNodesTelemetrySummary } from "../hooks/useTelemetry";
 import NodeCard from "./NodeCard";
 
 interface NodeListProps {
@@ -11,6 +12,7 @@ export default function NodeList({ onSelect }: NodeListProps) {
   const { data: nodesData, isLoading, isError, refetch } = useNodes(1, 100);
   const { data: onlineNodes = [] } = useOnlineNodes();
   const { data: offlineNodes = [] } = useOfflineNodes();
+  const { data: telemetrySummary, isLoading: isLoadingStats } = useAllNodesTelemetrySummary();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline" | "degraded" | "maintenance">("all");
   const [sortBy, setSortBy] = useState<"name" | "status" | "lastSeen">("name");
@@ -171,18 +173,22 @@ export default function NodeList({ onSelect }: NodeListProps) {
 
       {nodes.length > 0 ? (
         <div className="node-grid" role="list" aria-label="Node cards">
-          {nodes.map((node) => (
-            <NodeCard key={node.node_id} node={node} onSelect={onSelect} />
-          ))}
+          {nodes.map((node) => {
+            // Get telemetry stats for this node
+            const stats = telemetrySummary?.nodes?.[node.node_id] || null;
+            return (
+              <NodeCard
+                key={node.node_id}
+                node={node}
+                stats={stats}
+                isLoadingStats={isLoadingStats}
+                onSelect={onSelect}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
           <h3 className="empty-state-title">{searchQuery || statusFilter !== "all" ? "No matching nodes" : "No nodes registered"}</h3>
           <p className="empty-state-text">
             {searchQuery || statusFilter !== "all"

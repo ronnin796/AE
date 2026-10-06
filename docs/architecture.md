@@ -117,14 +117,16 @@ This document describes the Part I architecture and component interactions.
 - `src/types/index.ts` — TypeScript type definitions
 - `src/api/client.ts` — Axios API client wrapper
 - `src/hooks/useNodes.ts` — React Query for node data
-- `src/hooks/useTelemetry.ts` — React Query for telemetry
+- `src/hooks/useTelemetry.ts` — React Query for telemetry (includes useDebugEvents, useAllNodesTelemetrySummary)
 - `components/NodeList.tsx` — Node overview list
-- `components/NodeCard.tsx` — Individual node card view
+- `components/NodeCard.tsx` — Individual node card view with telemetry preview
 - `components/TelemetryCharts.tsx` — Recharts visualization
 - `components/StatusBadge.tsx` — Status indicator component
 - `components/NodeOverview.tsx` — Stats summary box
 - `components/NavBar.tsx` — Application navigation
 - `components/TelemetryDashboard.tsx` — Node-specific telemetry
+- `components/DebugPanel.tsx` — **NEW v2.0.23**: System event stream viewer
+- `context/DebugContext.tsx` — **NEW v2.0.23**: Debug event state management (backend + manual events)
 
 **Dependencies**:
 - `react` + `react-dom` — UI library
@@ -132,6 +134,37 @@ This document describes the Part I architecture and component interactions.
 - `@tanstack/react-query` — Data fetching and caching
 - `recharts` — Charting library
 - `axios` — HTTP client
+
+### 4.1 Telemetry Summary & Debug API (v2.0.23)
+
+**Telemetry Summary Endpoint**: `GET /api/v1/telemetry/summary/all`
+
+Purpose: Efficiently fetch telemetry statistics for ALL nodes in a single database query, avoiding N+1 API calls when rendering NodeCard previews in the node list.
+
+- Single query with LEFT JOIN (nodes → telemetry) grouped by node_id
+- Returns: count, avg/max cpu, avg/max memory, avg/max temperature, latest_timestamp per node
+- Polling interval: 5 seconds (via React Query)
+- Used by: NodeList → NodeCard telemetry preview section
+
+**Debug API Endpoints**:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/debug/events` | Reconstructed event stream from DB (registrations, heartbeats, telemetry, disconnections) |
+| `GET /api/v1/debug/stats` | System-wide statistics (node counts, telemetry points, latest per node) |
+| `GET /api/v1/debug/connections` | Active TCP connections from edge nodes |
+
+Event reconstruction sources:
+- Telemetry table → "telemetry" events with metric values
+- Nodes table created_at → "connect" events (registration)
+- Nodes table status + last_seen → "heartbeat"/"disconnect" events
+
+DebugPanel features:
+- Auto-scroll toggle
+- Event type filter (connect, disconnect, heartbeat, telemetry, command, error)
+- Manual event clearing
+- 5-second polling interval
+- Merges backend events with frontend-generated events (node selection, commands, refresh)
 
 ### 4. Protocol Layer
 

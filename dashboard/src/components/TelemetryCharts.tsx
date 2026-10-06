@@ -9,10 +9,6 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
   if (!aggregatedTelemetry || !aggregatedTelemetry.timestamps || aggregatedTelemetry.timestamps.length === 0) {
     return (
       <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-          <path d="M18 20V10M12 20V4M6 20v-6" />
-          <path d="M2 20h20" />
-        </svg>
         <h3 className="empty-state-title">No Chart Data</h3>
         <p className="empty-state-text">Not enough telemetry data points to render charts.</p>
       </div>
@@ -37,17 +33,18 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
     if (active && payload && payload.length) {
       return (
         <div style={{
-          background: 'var(--bg-secondary)',
+          background: 'var(--panel-bg)',
           border: '1px solid var(--border-primary)',
-          borderRadius: 'var(--radius-md)',
-          padding: '0.75rem',
-          boxShadow: 'var(--shadow-lg)',
-          minWidth: '180px'
+          borderRadius: 'var(--radius)',
+          padding: '0.5rem 0.75rem',
+          boxShadow: 'none',
+          minWidth: '160px',
+          fontSize: '0.75rem',
         }}>
-          <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{label}</p>
+          <p style={{ fontWeight: 600, marginBottom: '0.375rem', color: 'var(--text-primary)' }}>{label}</p>
           {payload.map((entry: any, i: number) => (
-            <p key={i} style={{ color: entry.color, margin: '0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.color }} />
+            <p key={i} style={{ color: entry.color, margin: '0.125rem 0', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: entry.color }} />
               <span>{entry.name}: </span>
               <strong>{entry.value !== null ? entry.value.toFixed(entry.name === 'load' ? 2 : 1) + (entry.name === 'temperature' ? '°C' : entry.name === 'load' ? '' : '%') : 'N/A'}</strong>
             </p>
@@ -71,13 +68,13 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
         {hasCpuData && (
           <div className="chart-container">
             <h3 className="chart-title">CPU Usage</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
                 <XAxis
                   dataKey="time"
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={{ stroke: 'var(--border-primary)' }}
                   interval={Math.max(1, Math.floor(chartData.length / 8))}
@@ -85,21 +82,20 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
                 <YAxis
                   domain={[0, 100]}
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => `${value}%`}
-                  width={40}
+                  width={35}
                 />
                 <Tooltip content={customTooltip} />
-                <Legend />
                 <Line
                   type="monotone"
                   dataKey="cpu"
                   stroke={chartColors.cpu}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2 }}
+                  activeDot={{ r: 4, strokeWidth: 1.5 }}
                   connectNulls={true}
                   name="CPU %"
                 />
@@ -111,13 +107,13 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
         {hasMemoryData && (
           <div className="chart-container">
             <h3 className="chart-title">Memory Usage</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
                 <XAxis
                   dataKey="time"
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={{ stroke: 'var(--border-primary)' }}
                   interval={Math.max(1, Math.floor(chartData.length / 8))}
@@ -125,21 +121,20 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
                 <YAxis
                   domain={[0, 100]}
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => `${value}%`}
-                  width={40}
+                  width={35}
                 />
                 <Tooltip content={customTooltip} />
-                <Legend />
                 <Line
                   type="monotone"
                   dataKey="memory"
                   stroke={chartColors.memory}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2 }}
+                  activeDot={{ r: 4, strokeWidth: 1.5 }}
                   connectNulls={true}
                   name="Memory %"
                 />
@@ -153,13 +148,13 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
         {hasTempData && (
           <div className="chart-container">
             <h3 className="chart-title">Temperature</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
                 <XAxis
                   dataKey="time"
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={{ stroke: 'var(--border-primary)' }}
                   interval={Math.max(1, Math.floor(chartData.length / 8))}
@@ -167,21 +162,20 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
                 <YAxis
                   domain={[0, 'dataMax']}
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => `${value}°C`}
-                  width={45}
+                  width={40}
                 />
                 <Tooltip content={customTooltip} />
-                <Legend />
                 <Line
                   type="monotone"
                   dataKey="temperature"
                   stroke={chartColors.temperature}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2 }}
+                  activeDot={{ r: 4, strokeWidth: 1.5 }}
                   connectNulls={true}
                   name="Temperature"
                 />
@@ -193,13 +187,13 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
         {hasLoadData && (
           <div className="chart-container">
             <h3 className="chart-title">Load Average (1 min)</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
                 <XAxis
                   dataKey="time"
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={{ stroke: 'var(--border-primary)' }}
                   interval={Math.max(1, Math.floor(chartData.length / 8))}
@@ -207,21 +201,20 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
                 <YAxis
                   domain={[0, 'dataMax']}
                   stroke="var(--text-tertiary)"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => value.toFixed(2)}
-                  width={45}
+                  width={40}
                 />
                 <Tooltip content={customTooltip} />
-                <Legend />
                 <Line
                   type="monotone"
                   dataKey="load"
                   stroke={chartColors.load}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2 }}
+                  activeDot={{ r: 4, strokeWidth: 1.5 }}
                   connectNulls={true}
                   name="Load (1m)"
                 />
@@ -232,7 +225,7 @@ export function TelemetryCharts({ aggregatedTelemetry }: TelemetryChartsProps) {
       </div>
 
       {(hasCpuData || hasMemoryData || hasTempData || hasLoadData) && (
-        <p className="chart-hint" style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+        <p className="chart-hint" style={{ marginTop: '0.75rem', textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
           Showing {chartData.length} data points • Hover for details • Data from real /proc and /sys readings
         </p>
       )}

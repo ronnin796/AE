@@ -1,6 +1,6 @@
 [project]
 name = "aetheredge-ml"
-version = "0.1.0"
+version = "2.0.23"
 description = "AetherEdge ML Tooling for model export and quantization"
 authors = [{name = "AetherEdge Team"}]
 license = {text = "MIT"}

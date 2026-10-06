@@ -2,11 +2,18 @@
 
 ## Current Status
 
-**Last Updated:** 2026-10-01
+**Last Updated:** 2026-10-05
 
-**Phase:** ✅ **COMPLETE - Ready for Presentation**
+**Phase:** ✅ **COMPLETE - Ready for Presentation** | **Version 2.0.23**
 
 All Part I milestones are finished. The prototype meets all 16 success criteria and is ready for demonstration.
+
+### v2.0.23 Changes (2026-10-05)
+- **NodeCard Telemetry Preview**: Fixed "No telemetry data" issue by implementing efficient `/api/v1/telemetry/summary/all` endpoint that returns telemetry stats for all nodes in a single request
+- **Telemetry State Handling**: NodeCard now properly distinguishes between 4 states: Live (with real values), Stale (data older than 3x telemetry interval), Waiting (node online but no telemetry yet), Offline
+- **Debug Panel**: Connected to backend via new `/api/v1/debug/events`, `/api/v1/debug/stats`, `/api/v1/debug/connections` endpoints - now shows real system events (registrations, heartbeats, telemetry receipts, disconnections)
+- **Performance**: Single API call for all node telemetry summaries instead of N+1 queries
+- **Version bump**: AetherEdge v2.0.23 across all components (Rust edge, Python server, React dashboard, ML tooling)
 
 ---
 

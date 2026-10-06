@@ -1,6 +1,6 @@
 {
   "name": "aetheredge-dashboard",
-  "version": "0.1.0",
+  "version": "2.0.23",
   "private": true,
   "description": "AetherEdge Monitoring Dashboard",
   "main": "src/main.tsx",

@@ -1,7 +1,7 @@
 """Telemetry Pydantic schemas for API"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -68,3 +68,29 @@ class TelemetryStats(BaseModel):
     avg_temperature: Optional[float] = None
     max_temperature: Optional[float] = None
     latest_timestamp: Optional[int] = None
+
+
+class TelemetrySummary(BaseModel):
+    """Telemetry summary for all nodes"""
+    nodes: Dict[str, TelemetryStats]
+
+
+class TelemetryLatest(BaseModel):
+    """Latest telemetry for a node"""
+    node_id: str
+    timestamp: int
+    cpu_usage: Optional[float] = None
+    cpu_per_core: Optional[list[float]] = None
+    memory_usage: Optional[float] = None
+    memory_total: Optional[int] = None
+    memory_available: Optional[int] = None
+    memory_used: Optional[int] = None
+    temperature: Optional[float] = None
+    temperatures: Optional[list[float]] = None
+    uptime: Optional[int] = None
+    load_1: Optional[float] = None
+    load_5: Optional[float] = None
+    load_15: Optional[float] = None
+    processes_running: Optional[int] = None
+    processes_total: Optional[int] = None
+    age_seconds: Optional[int] = None

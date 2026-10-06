@@ -37,13 +37,12 @@ const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp * 1000).toLocaleString();
 };
 
-type TabId = "overview" | "telemetry" | "system" | "commands";
+type TabId = "overview" | "telemetry" | "system";
 
-const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: "overview", label: "Overview", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg> },
-  { id: "telemetry", label: "Telemetry", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 20V10M12 20V4M6 20v-6"/><path d="M2 20h20"/></svg> },
-  { id: "system", label: "System", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> },
-  { id: "commands", label: "Commands", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> },
+const tabs: { id: TabId; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "telemetry", label: "Telemetry" },
+  { id: "system", label: "System" },
 ];
 
 export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailProps) {
@@ -87,22 +86,8 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
     }
   };
 
-  const commands = [
-    { id: "shutdown", label: "Shutdown Node", icon: "⏻", variant: "danger" as const, confirm: true },
-    { id: "reboot", label: "Reboot Node", icon: "⟳", variant: "warning" as const, confirm: true },
-    { id: "disconnect", label: "Disconnect Node", icon: "🔌", variant: "danger" as const, confirm: true },
-    { id: "reconnect", label: "Reconnect Node", icon: "🔄", variant: "info" as const, confirm: false },
-    { id: "update_telemetry_interval", label: "Telemetry: 5s", icon: "📊", variant: "info" as const, params: { interval: 5 } },
-    { id: "update_telemetry_interval", label: "Telemetry: 10s", icon: "📊", variant: "info" as const, params: { interval: 10 } },
-    { id: "update_telemetry_interval", label: "Telemetry: 30s", icon: "📊", variant: "info" as const, params: { interval: 30 } },
-    { id: "update_heartbeat_interval", label: "Heartbeat: 10s", icon: "💓", variant: "info" as const, params: { interval: 10 } },
-    { id: "update_heartbeat_interval", label: "Heartbeat: 30s", icon: "💓", variant: "info" as const, params: { interval: 30 } },
-    { id: "update_heartbeat_interval", label: "Heartbeat: 60s", icon: "💓", variant: "info" as const, params: { interval: 60 } },
-  ];
-
-  // Delete is a separate destructive action
   const handleDelete = async () => {
-    if (!window.confirm(`PERMANENTLY delete node "${node.hostname}" (${node.node_id})? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete node "${node.hostname}" (${node.node_id})?`)) return;
     setActionLoading("delete");
     setActionResult(null);
     addEvent({ type: "command", node_id: node.node_id, message: `Deleting node ${node.node_id}` });
@@ -110,7 +95,6 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
       const result = await deleteNode(node.node_id);
       addEvent({ type: "command", node_id: node.node_id, message: `Node deleted: ${result.message}` });
       setActionResult({ success: true, message: result.message || `Node ${node.node_id} deleted` });
-      // Call callback to refresh parent
       if (onNodeDeleted) onNodeDeleted();
     } catch (error: any) {
       const msg = error.response?.data?.detail || error.message || "Failed to delete node";
@@ -122,7 +106,7 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
   };
 
   return (
-    <div className="node-detail" role="main" aria-label={`Node details: ${node.hostname}`}>
+    <div className="panel node-detail" role="main" aria-label={`Node details: ${node.hostname}`}>
       <header className="node-detail-header">
         <div className="node-detail-main">
           <h2 className="node-detail-name">{node.hostname}</h2>
@@ -137,43 +121,72 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
       </header>
 
       <div className="node-detail-actions" role="group" aria-label="Node commands">
-        {commands.map((cmd, idx) => (
-          <button
-            key={`${cmd.id}-${idx}`}
-            className={`btn btn-${cmd.variant} ${!canControl ? "btn-disabled" : ""}`}
-            onClick={() => {
-              if (cmd.confirm && !window.confirm(`Are you sure you want to ${cmd.label.toLowerCase()}?`)) return;
-              handleAction(cmd.id, cmd.params || {});
-            }}
-            disabled={!canControl || actionLoading === cmd.id}
-            aria-disabled={!canControl || actionLoading === cmd.id}
-          >
-            {actionLoading === cmd.id ? (
-              <span className="animate-pulse">Sending...</span>
-            ) : (
-              <>
-                <span aria-hidden="true">{cmd.icon}</span>
-                <span>{cmd.label}</span>
-              </>
-            )}
-          </button>
-        ))}
-        {/* Delete button - separate destructive action */}
         <button
-          className={`btn btn-danger ${actionLoading === "delete" ? "btn-loading" : ""}`}
+          className={`btn btn-secondary btn-sm ${!canControl ? "btn-disabled" : ""}`}
+          onClick={() => {
+            if (!canControl) return;
+            if (window.confirm("Shutdown this node?")) handleAction("shutdown");
+          }}
+          disabled={!canControl || actionLoading === "shutdown"}
+          aria-disabled={!canControl || actionLoading === "shutdown"}
+        >
+          Shutdown
+        </button>
+
+        <button
+          className={`btn btn-secondary btn-sm ${!canControl ? "btn-disabled" : ""}`}
+          onClick={() => {
+            if (!canControl) return;
+            if (window.confirm("Disconnect this node?")) handleAction("disconnect");
+          }}
+          disabled={!canControl || actionLoading === "disconnect"}
+          aria-disabled={!canControl || actionLoading === "disconnect"}
+        >
+          Disconnect
+        </button>
+
+        <button
+          className={`btn btn-secondary btn-sm ${!canControl ? "btn-disabled" : ""}`}
+          onClick={() => {
+            if (!canControl) return;
+            if (window.confirm("Reconnect this node?")) handleAction("reconnect");
+          }}
+          disabled={!canControl || actionLoading === "reconnect"}
+          aria-disabled={!canControl || actionLoading === "reconnect"}
+        >
+          Reconnect
+        </button>
+
+        <button
+          className={`btn btn-warning btn-sm ${!canControl ? "btn-disabled" : ""}`}
+          onClick={() => {
+            if (!canControl) return;
+            handleAction("update_telemetry_interval", { interval: 5 });
+          }}
+          disabled={!canControl || actionLoading === "update_telemetry_interval"}
+        >
+          Telemetry: 5s
+        </button>
+
+        <button
+          className={`btn btn-warning btn-sm ${!canControl ? "btn-disabled" : ""}`}
+          onClick={() => {
+            if (!canControl) return;
+            handleAction("update_telemetry_interval", { interval: 10 });
+          }}
+          disabled={!canControl || actionLoading === "update_telemetry_interval"}
+        >
+          Telemetry: 10s
+        </button>
+
+        <button
+          className={`btn btn-danger btn-sm ${actionLoading === "delete" ? "btn-disabled" : ""}`}
           onClick={handleDelete}
           disabled={actionLoading !== null}
           aria-disabled={actionLoading !== null}
           title="Permanently delete this node from the registry"
         >
-          {actionLoading === "delete" ? (
-            <span className="animate-pulse">Deleting...</span>
-          ) : (
-            <>
-              <span aria-hidden="true">🗑️</span>
-              <span>Delete Node</span>
-            </>
-          )}
+          {actionLoading === "delete" ? "Deleting..." : "Delete Node"}
         </button>
       </div>
 
@@ -207,12 +220,9 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
             id={`tab-${tab.id}`}
             className={`node-detail-tab ${activeTab === tab.id ? "active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
-            disabled={!canControl && tab.id === "commands"}
+            disabled={!canControl && tab.id === "system"}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-              {tab.icon}
-              {tab.label}
-            </span>
+            {tab.label}
           </button>
         ))}
       </nav>
@@ -261,7 +271,7 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
               <h3 id="capabilities-title" className="node-detail-section-title">Capabilities</h3>
               <ul className="capabilities-list" role="list">
                 {node.capabilities.map((cap) => (
-                  <li key={cap}><span className="badge badge-primary">{cap}</span></li>
+                  <li key={cap}><span className="badge badge-info">{cap}</span></li>
                 ))}
               </ul>
             </section>
@@ -275,8 +285,8 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
           hidden={activeTab !== "telemetry"}
           className="animate-fade-in"
         >
-          <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem' }}>
               Data Points:
               <select
                 className="input select"
@@ -291,31 +301,16 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
               </select>
             </label>
             <button className="btn btn-secondary btn-sm" onClick={() => refetchTelemetry()} disabled={aggregatedTelemetry?.timestamps?.length === 0}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M23 4v6h-6" />
-                <path d="M1 20v-6h6" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
               Refresh
             </button>
           </div>
 
           {stats && stats.count > 0 ? (
             <>
-              {/* Live telemetry status indicator */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '0.75rem', 
-                padding: '0.75rem 1rem',
-                background: 'var(--accent-success-light)',
-                border: '1px solid var(--accent-success)',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: '1rem'
-              }}>
-                <span className="status-dot online" style={{ width: '10px', height: '10px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-success-light)', border: '1px solid var(--accent-success)', marginBottom: '1rem' }}>
+                <span className={"status-dot online"} style={{ width: '10px', height: '10px' }} />
                 <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>LIVE TELEMETRY</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                   {stats.latest_timestamp ? (
                     <>
                       Last update: {formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString())} ago
@@ -330,7 +325,7 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
                 </span>
               </div>
 
-              <div className="stats-grid" style={{ marginBottom: '1.5rem' }} role="region" aria-label="Telemetry statistics">
+              <div className="stats-grid" style={{ marginBottom: '1rem' }} role="region" aria-label="Telemetry statistics">
                 <div className="stat-card">
                   <div className="stat-label">Data Points</div>
                   <div className="stat-value">{stats.count}</div>
@@ -355,54 +350,33 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
                   <div className="stat-label">Avg Temp</div>
                   <div className="stat-value">{stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "N/A"}</div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-label">Peak Temp</div>
-                  <div className="stat-value">{stats.max_temperature ? `${stats.max_temperature.toFixed(1)}°C` : "N/A"}</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Latest</div>
-                  <div className="stat-value" style={{ fontSize: '1.25rem' }}>
-                    {stats.latest_timestamp ? formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString()) : "Never"}
-                  </div>
-                </div>
               </div>
 
               {aggregatedTelemetry && aggregatedTelemetry.timestamps.length > 0 ? (
                 <TelemetryCharts aggregatedTelemetry={aggregatedTelemetry} />
               ) : (
                 <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-                  <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path d="M18 20V10M12 20V4M6 20v-6" />
-                    <path d="M2 20h20" />
-                  </svg>
                   <h3 className="empty-state-title">Loading chart data...</h3>
-                  <p className="empty-state-title">Fetching telemetry history for charts</p>
+                  <p className="empty-state-text">Fetching telemetry history for charts</p>
                 </div>
               )}
             </>
           ) : (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-              <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <path d="M18 20V10M12 20V4M6 20v-6" />
-                <path d="M2 20h20" />
-              </svg>
               <h3 className="empty-state-title">No Telemetry Data</h3>
               <p className="empty-state-text">
                 This node has not sent any telemetry data yet.
               </p>
               <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)', textAlign: 'left', maxWidth: '400px' }}>
                 <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Node Status:</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem' }}>
                   <span className={`status-dot ${statusKey}`} />
                   <span className={`status-badge status-${statusKey}`}>{statusKey.toUpperCase()}</span>
                 </div>
-                <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                   <div>Node ID: <code>{node.node_id}</code></div>
                   <div>Last heartbeat: {new Date(node.last_seen).toLocaleString()} ({formatTimeAgo(node.last_seen)} ago)</div>
                   <div>Telemetry interval: {node.telemetry_interval || '2'}s (configured by server)</div>
-                </div>
-                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--accent-warning)' }}>
-                  If node is ONLINE but no telemetry appears, check server logs for telemetry receipt.
                 </div>
               </div>
             </div>
@@ -445,80 +419,6 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
               <div><dt>Registered At</dt><dd>{new Date(node.created_at).toLocaleString()}</dd></div>
               <div><dt>Last Updated</dt><dd>{new Date(node.updated_at).toLocaleString()}</dd></div>
             </dl>
-          </section>
-        </div>
-
-        <div
-          role="tabpanel"
-          id="panel-commands"
-          aria-labelledby="tab-commands"
-          hidden={activeTab !== "commands"}
-          className="animate-fade-in"
-        >
-          <section className="node-detail-section" aria-labelledby="available-commands-title">
-            <h3 id="available-commands-title" className="node-detail-section-title">Available Commands</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.875rem' }}>
-              Send commands to the edge node via the TCP control channel. Commands are queued and delivered on the next connection.
-            </p>
-
-            <div className="commands-help" role="list" aria-label="Available commands">
-              <div className="command-item" role="listitem">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="cmd-badge">shutdown</span>
-                  <span>Gracefully stops the edge node process</span>
-                </div>
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => { if (window.confirm("Shutdown this node?")) handleAction("shutdown"); }}
-                    disabled={!canControl}
-                  >
-                    ⏻ Shutdown
-                  </button>
-                </div>
-              </div>
-
-              <div className="command-item" role="listitem">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="cmd-badge">reboot</span>
-                  <span>Requests node to reboot (requires node support)</span>
-                </div>
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-warning btn-sm"
-                    onClick={() => { if (window.confirm("Reboot this node?")) handleAction("reboot"); }}
-                    disabled={!canControl}
-                  >
-                    ⟳ Reboot
-                  </button>
-                </div>
-              </div>
-
-              <div className="command-item" role="listitem">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="cmd-badge">update_telemetry_interval</span>
-                  <span>Changes telemetry collection interval (seconds)</span>
-                </div>
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_telemetry_interval", { interval: 5 })} disabled={!canControl}>5s</button>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_telemetry_interval", { interval: 10 })} disabled={!canControl}>10s</button>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_telemetry_interval", { interval: 30 })} disabled={!canControl}>30s</button>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_telemetry_interval", { interval: 60 })} disabled={!canControl}>60s</button>
-                </div>
-              </div>
-
-              <div className="command-item" role="listitem">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="cmd-badge">update_heartbeat_interval</span>
-                  <span>Changes heartbeat interval (seconds)</span>
-                </div>
-                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_heartbeat_interval", { interval: 10 })} disabled={!canControl}>10s</button>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_heartbeat_interval", { interval: 30 })} disabled={!canControl}>30s</button>
-                  <button className="btn btn-info btn-sm" onClick={() => handleAction("update_heartbeat_interval", { interval: 60 })} disabled={!canControl}>60s</button>
-                </div>
-              </div>
-            </div>
           </section>
         </div>
       </div>

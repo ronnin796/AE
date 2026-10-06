@@ -125,7 +125,7 @@ async def add_telemetry(telemetry_data: TelemetryCreate, db: AsyncSession) -> Te
 
     telemetry = Telemetry(
         node_id=node.id,
-        timestamp=datetime.fromtimestamp(telemetry_data.timestamp),
+        timestamp=datetime.fromtimestamp(telemetry_data.timestamp, tz=timezone.utc),
         cpu_usage=telemetry_data.cpu_usage,
         cpu_per_core=str(telemetry_data.cpu_per_core) if telemetry_data.cpu_per_core else None,
         memory_usage=telemetry_data.memory_usage,
@@ -244,3 +244,94 @@ async def _get_telemetry_stats_internal(node_id: str, db: AsyncSession) -> Dict[
         "max_temperature": row[6],
         "latest_timestamp": int(row[7].timestamp()) if row[7] else None,
     }
+
+
+async def get_all_nodes_telemetry_summary(db: AsyncSession) -> Dict[str, Dict[str, Any]]:
+    """
+    Get telemetry summary for all nodes in a single query.
+    Returns a dict mapping node_id -> telemetry stats.
+    """
+    from app.models.node import Node
+
+    # Query to get stats for all nodes with telemetry
+    query = (
+        select(
+            Node.node_id,
+            func.count(Telemetry.id).label("count"),
+            func.avg(Telemetry.cpu_usage).label("avg_cpu"),
+            func.max(Telemetry.cpu_usage).label("max_cpu"),
+            func.avg(Telemetry.memory_usage).label("avg_memory"),
+            func.max(Telemetry.memory_usage).label("max_memory"),
+            func.avg(Telemetry.temperature).label("avg_temperature"),
+            func.max(Telemetry.temperature).label("max_temperature"),
+            func.max(Telemetry.timestamp).label("latest_timestamp"),
+        )
+        .select_from(Node)
+        .outerjoin(Telemetry, Node.id == Telemetry.node_id)
+        .group_by(Node.id, Node.node_id)
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    summary = {}
+    for row in rows:
+        node_id = row[0]
+        summary[node_id] = {
+            "node_id": node_id,
+            "count": row[1] or 0,
+            "avg_cpu": row[2],
+            "max_cpu": row[3],
+            "avg_memory": row[4],
+            "max_memory": row[5],
+            "avg_temperature": row[6],
+            "max_temperature": row[7],
+            "latest_timestamp": int(row[8].timestamp()) if row[8] else None,
+        }
+
+    return summary
+
+
+async def get_latest_telemetry_for_node(node_id: str, db: AsyncSession) -> Optional[Telemetry]:
+    """Get the most recent telemetry entry for a node."""
+    node = await get_node_by_id(node_id, db)
+    if not node:
+        return None
+
+    result = await db.execute(
+        select(Telemetry)
+        .where(Telemetry.node_id == node.id)
+        .order_by(desc(Telemetry.timestamp))
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_latest_telemetry_for_all_nodes(db: AsyncSession) -> Dict[int, Telemetry]:
+    """
+    Get the latest telemetry for all nodes in a single query.
+    Returns a dict mapping node.id -> latest Telemetry.
+    """
+    # Subquery to get the latest telemetry timestamp per node
+    from sqlalchemy import func as sqlfunc
+    latest_subquery = (
+        select(Telemetry.node_id, sqlfunc.max(Telemetry.timestamp).label("max_ts"))
+        .group_by(Telemetry.node_id)
+        .subquery()
+    )
+
+    # Join with telemetry to get the full records
+    query = (
+        select(Telemetry)
+        .join(
+            latest_subquery,
+            (Telemetry.node_id == latest_subquery.c.node_id)
+            & (Telemetry.timestamp == latest_subquery.c.max_ts),
+        )
+    )
+
+    result = await db.execute(query)
+    telemetry_list = result.scalars().all()
+
+    # Map by node_id (the internal integer ID)
+    return {t.node_id: t for t in telemetry_list}
