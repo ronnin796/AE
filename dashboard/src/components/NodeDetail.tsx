@@ -37,6 +37,60 @@ const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp * 1000).toLocaleString();
 };
 
+const getTelemetryState = (node: Node, stats: TelemetryStats | null | undefined) => {
+  const isOnline = node.status === "online";
+
+  // No stats available (not loaded or no telemetry in DB)
+  if (!stats || stats.count === 0) {
+    if (isOnline) {
+      return { state: 'waiting', label: 'WAITING', details: '' };
+    } else {
+      return { state: 'offline', label: 'OFFLINE', details: `Last seen: ${formatTimeAgo(new Date(node.last_seen).toISOString())}` };
+    }
+  }
+
+  // Has telemetry data - check freshness
+  if (stats.latest_timestamp) {
+    const latestTs = stats.latest_timestamp * 1000; // Convert to ms
+    const now = Date.now();
+    const ageMs = now - latestTs;
+    const ageSecs = Math.floor(ageMs / 1000);
+
+    // Consider telemetry stale if older than 3x telemetry interval (default 2s -> 6s threshold)
+    const telemetryInterval = node.telemetry_interval || 2;
+    const staleThreshold = telemetryInterval * 3 * 1000; // ms
+
+    if (ageMs > staleThreshold) {
+      return {
+        state: 'stale',
+        label: 'STALE',
+        details: `Last update: ${formatRelativeTimeFromSeconds(ageSecs)}`,
+        ageSecs
+      };
+    }
+
+    return {
+      state: 'live',
+      label: 'LIVE',
+      details: `Updated ${formatRelativeTimeFromSeconds(ageSecs)}`,
+      ageSecs
+    };
+  }
+
+  // Has stats but no timestamp (edge case)
+  return { state: 'live', label: 'LIVE', details: 'Data available' };
+};
+
+const formatRelativeTimeFromSeconds = (seconds: number) => {
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
 type TabId = "overview" | "telemetry" | "system";
 
 const tabs: { id: TabId; label: string }[] = [
@@ -305,25 +359,55 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
             </button>
           </div>
 
-          {stats && stats.count > 0 ? (
+          {(stats && stats.count > 0) ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-success-light)', border: '1px solid var(--accent-success)', marginBottom: '1rem' }}>
-                <span className={"status-dot online"} style={{ width: '10px', height: '10px' }} />
-                <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>LIVE TELEMETRY</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                  {stats.latest_timestamp ? (
-                    <>
-                      Last update: {formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString())} ago
-                      {' | '}
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                        {new Date(stats.latest_timestamp * 1000).toLocaleTimeString()}
+              {(() => {
+                const telemetryState = getTelemetryState(node, stats);
+                if (telemetryState.state === 'live') {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-success-light)', border: '1px solid var(--accent-success)', marginBottom: '1rem' }}>
+                      <span className={"status-dot online"} style={{ width: '10px', height: '10px' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>LIVE TELEMETRY</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        {stats.latest_timestamp ? (
+                          <>
+                            Last update: {formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString())}
+                            {' | '}
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                              {new Date(stats.latest_timestamp * 1000).toLocaleTimeString()}
+                            </span>
+                          </>
+                        ) : (
+                          'Waiting for first update...'
+                        )}
                       </span>
-                    </>
-                  ) : (
-                    'Waiting for first update...'
-                  )}
-                </span>
-              </div>
+                    </div>
+                  );
+                } else if (telemetryState.state === 'stale') {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-warning-light)', border: '1px solid var(--accent-warning)', marginBottom: '1rem' }}>
+                      <span className={"status-dot degraded"} style={{ width: '10px', height: '10px' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--accent-warning)' }}>STALE TELEMETRY</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        {telemetryState.details}
+                        {' | '}
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                          {stats.latest_timestamp ? new Date(stats.latest_timestamp * 1000).toLocaleTimeString() : ''}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                } else if (telemetryState.state === 'waiting') {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-info-light)', border: '1px solid var(--accent-info)', marginBottom: '1rem' }}>
+                      <span className={"status-dot online"} style={{ width: '10px', height: '10px' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--accent-info)' }}>WAITING FOR TELEMETRY</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Node is online but no telemetry data received yet</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="stats-grid" style={{ marginBottom: '1rem' }} role="region" aria-label="Telemetry statistics">
                 <div className="stat-card">
