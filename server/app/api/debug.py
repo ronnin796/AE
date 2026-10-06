@@ -62,7 +62,11 @@ async def get_debug_events(
             "timestamp": t.timestamp.isoformat(),
             "type": "telemetry",
             "node_id": node.node_id,
-            "message": f"Telemetry received: CPU={t.cpu_usage:.1f}% MEM={t.memory_usage:.1f}% Temp={t.temperature:.1f}°C" if t.cpu_usage is not None else "Telemetry received"
+            "message": (
+                f"Telemetry received: CPU={t.cpu_usage:.1f}% MEM={t.memory_usage:.1f}% Temp={t.temperature:.1f}°C"
+                if all(v is not None for v in (t.cpu_usage, t.memory_usage, t.temperature))
+                else "Telemetry received"
+            ),
         })
     
     # Add node registration/heartbeat events from node table
