@@ -91,8 +91,8 @@ impl NetworkClient {
         Ok(())
     }
 
-    /// Send an envelope and wait for response
-    async fn send_request(&self, envelope: Envelope) -> Result<Envelope> {
+    /// Send an envelope and wait for response (pub(crate) for protocol module)
+    pub(crate) async fn send_request(&self, envelope: Envelope) -> Result<Envelope> {
         self.ensure_connected().await?;
 
         let mut stream_guard = self.stream.lock().await;

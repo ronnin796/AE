@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MINOR_VERSION"],"enum":["LoadDynamicError"],"fn":["api","info","set_api"],"macro":[["inputs",1],["log",1],["ortsys",1]],"mod":["compiler","device","editor","environment","ep","error","logging","memory","operator","session","util","value"],"trait":["AsPointer"]};

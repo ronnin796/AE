@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ArenaExtendStrategy"],"fn":["get_gpu_device","set_gpu_device"],"mod":["cpu"],"struct":["ExecutionProviderDispatch","ExecutionProviderLibrary"],"trait":["ArbitrarilyConfigurableExecutionProvider","ExecutionProvider","ExecutionProviderResource"]};

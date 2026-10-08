@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { Node, TelemetryStats } from "../types";
+import { Node, TelemetryStats, TelemetryAggregated } from "../types";
 import { shutdownNode, sendNodeCommand, disconnectNode, reconnectNode, deleteNode } from "../api/client";
 import { TelemetryCharts } from "./TelemetryCharts";
-import { TelemetryAggregated } from "../types";
 import { useAggregatedTelemetry } from "../hooks/useTelemetry";
 import { useDebug } from "../context/DebugContext";
 
 interface NodeDetailProps {
   node: Node;
   stats?: TelemetryStats | null;
+  aggregatedTelemetry?: TelemetryAggregated;
   onNodeDeleted?: () => void;
 }
 
@@ -37,48 +37,72 @@ const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp * 1000).toLocaleString();
 };
 
-const getTelemetryState = (node: Node, stats: TelemetryStats | null | undefined) => {
+interface TelemetryState {
+  state: 'live' | 'stale' | 'waiting' | 'offline';
+  label: string;
+  details: string;
+  ageSecs?: number;
+  latestTelemetryAt?: number; // Unix seconds
+}
+
+const getTelemetryState = (
+  node: Node,
+  stats: TelemetryStats | null | undefined,
+  aggregatedTelemetry?: TelemetryAggregated
+): TelemetryState => {
   const isOnline = node.status === "online";
 
-  // No stats available (not loaded or no telemetry in DB)
-  if (!stats || stats.count === 0) {
+  // Determine the most recent telemetry timestamp from the best available source
+  // Priority: aggregatedTelemetry (refetches every 5s, confirmed real-time) > stats (refetches every 10s)
+  let latestTelemetryAt: number | undefined;
+
+  if (aggregatedTelemetry && aggregatedTelemetry.timestamps.length > 0) {
+    // timestamps are ordered DESC (newest first), so [0] is the latest
+    latestTelemetryAt = aggregatedTelemetry.timestamps[0];
+  } else if (stats?.latest_timestamp) {
+    latestTelemetryAt = stats.latest_timestamp;
+  }
+
+  // No telemetry data at all
+  if (!latestTelemetryAt) {
     if (isOnline) {
-      return { state: 'waiting', label: 'WAITING', details: '' };
+      return { state: 'waiting', label: 'WAITING', details: 'Waiting for first telemetry...' };
     } else {
-      return { state: 'offline', label: 'OFFLINE', details: `Last seen: ${formatTimeAgo(new Date(node.last_seen).toISOString())}` };
+      return {
+        state: 'offline',
+        label: 'OFFLINE',
+        details: `Last seen: ${formatTimeAgo(new Date(node.last_seen).toISOString())}`
+      };
     }
   }
 
   // Has telemetry data - check freshness
-  if (stats.latest_timestamp) {
-    const latestTs = stats.latest_timestamp * 1000; // Convert to ms
-    const now = Date.now();
-    const ageMs = now - latestTs;
-    const ageSecs = Math.floor(ageMs / 1000);
+  const latestTs = latestTelemetryAt * 1000; // Convert to ms
+  const now = Date.now();
+  const ageMs = now - latestTs;
+  const ageSecs = Math.floor(ageMs / 1000);
 
-    // Consider telemetry stale if older than 3x telemetry interval (default 2s -> 6s threshold)
-    const telemetryInterval = node.telemetry_interval || 2;
-    const staleThreshold = telemetryInterval * 3 * 1000; // ms
+  // Consider telemetry stale if older than 3x telemetry interval (default 2s -> 6s threshold)
+  const telemetryInterval = node.telemetry_interval || 2;
+  const staleThreshold = telemetryInterval * 3 * 1000; // ms
 
-    if (ageMs > staleThreshold) {
-      return {
-        state: 'stale',
-        label: 'STALE',
-        details: `Last update: ${formatRelativeTimeFromSeconds(ageSecs)}`,
-        ageSecs
-      };
-    }
-
+  if (ageMs > staleThreshold) {
     return {
-      state: 'live',
-      label: 'LIVE',
-      details: `Updated ${formatRelativeTimeFromSeconds(ageSecs)}`,
-      ageSecs
+      state: 'stale',
+      label: 'STALE TELEMETRY',
+      details: `Last update: ${formatRelativeTimeFromSeconds(ageSecs)}`,
+      ageSecs,
+      latestTelemetryAt
     };
   }
 
-  // Has stats but no timestamp (edge case)
-  return { state: 'live', label: 'LIVE', details: 'Data available' };
+  return {
+    state: 'live',
+    label: 'LIVE TELEMETRY',
+    details: `Updated ${formatRelativeTimeFromSeconds(ageSecs)}`,
+    ageSecs,
+    latestTelemetryAt
+  };
 };
 
 const formatRelativeTimeFromSeconds = (seconds: number) => {
@@ -315,7 +339,10 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
                 <div><dt>Max Memory Usage</dt><dd>{stats.max_memory ? `${stats.max_memory.toFixed(1)}%` : "N/A"}</dd></div>
                 <div><dt>Avg Temperature</dt><dd>{stats.avg_temperature ? `${stats.avg_temperature.toFixed(1)}°C` : "N/A"}</dd></div>
                 <div><dt>Max Temperature</dt><dd>{stats.max_temperature ? `${stats.max_temperature.toFixed(1)}°C` : "N/A"}</dd></div>
-                <div><dt>Latest Reading</dt><dd>{stats.latest_timestamp ? formatTimestamp(stats.latest_timestamp) : "N/A"}</dd></div>
+                <div><dt>Latest Reading</dt><dd>{(() => {
+                  const telemetryState = getTelemetryState(node, stats, aggregatedTelemetry);
+                  return telemetryState.latestTelemetryAt ? formatTimestamp(telemetryState.latestTelemetryAt) : "N/A";
+                })()}</dd></div>
               </dl>
             </section>
           )}
@@ -362,19 +389,19 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
           {(stats && stats.count > 0) ? (
             <>
               {(() => {
-                const telemetryState = getTelemetryState(node, stats);
+                const telemetryState = getTelemetryState(node, stats, aggregatedTelemetry);
                 if (telemetryState.state === 'live') {
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'var(--accent-success-light)', border: '1px solid var(--accent-success)', marginBottom: '1rem' }}>
                       <span className={"status-dot online"} style={{ width: '10px', height: '10px' }} />
                       <span style={{ fontWeight: 600, color: 'var(--accent-success)' }}>LIVE TELEMETRY</span>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                        {stats.latest_timestamp ? (
+                        {telemetryState.latestTelemetryAt ? (
                           <>
-                            Last update: {formatTimeAgo(new Date(stats.latest_timestamp * 1000).toISOString())}
+                            Last update: {formatTimeAgo(new Date(telemetryState.latestTelemetryAt * 1000).toISOString())}
                             {' | '}
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                              {new Date(stats.latest_timestamp * 1000).toLocaleTimeString()}
+                              {new Date(telemetryState.latestTelemetryAt * 1000).toLocaleTimeString()}
                             </span>
                           </>
                         ) : (
@@ -392,7 +419,7 @@ export default function NodeDetail({ node, stats, onNodeDeleted }: NodeDetailPro
                         {telemetryState.details}
                         {' | '}
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                          {stats.latest_timestamp ? new Date(stats.latest_timestamp * 1000).toLocaleTimeString() : ''}
+                          {telemetryState.latestTelemetryAt ? new Date(telemetryState.latestTelemetryAt * 1000).toLocaleTimeString() : ''}
                         </span>
                       </span>
                     </div>

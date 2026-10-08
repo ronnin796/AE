@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DeviceCompatibility"],"struct":["CompatibilityInfo","Device","HardwareDevice"]};

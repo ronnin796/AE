@@ -13,7 +13,7 @@ import numpy as np
 
 # Add parent directory to path for utils import
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from utils import setup_logging, save_metadata, load_metadata, format_size
+from src.utils import setup_logging, save_metadata, load_metadata, format_size
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def quantize_model_static(
 
         def get_next(self):
             try:
-                return next(self.iterator)
+                return {'x': next(self.iterator)}  # Return dict mapping input name to data
             except StopIteration:
                 return None
 
@@ -87,16 +87,34 @@ def quantize_model_static(
     logger.info(f"Input model: {model_path} ({format_size(model_path.stat().st_size)})")
     logger.info(f"Output model: {output_path}")
 
+    # Pre-process model for quantization compatibility with opset 18
+    # Shape inference issues with newer opsets are common; pre-process before quantizing
+    from onnx import shape_inference
+    import shutil
+
+    model_preproc_path = model_path.parent / f"{model_path.stem}_preproc.onnx"
+    model_orig_path = model_path.parent / f"{model_path.stem}_orig.onnx"
+
+    # Keep original backup
+    shutil.copy2(str(model_path), str(model_orig_path))
+
+    # Pre-process the model for quantization compatibility
+    shape_inference.infer_shapes_path(str(model_path), str(model_preproc_path))
+    logger.info(f"Preprocessed model for quantization saved to {model_preproc_path}")
+
     calibration_reader = SimpleCalibrationReader(calibration_data)
 
+    # Static quantization: use QDQ (QuantizeLinear/DequantizeLinear) format
+    # QDQ is recommended by ONNX Runtime for x64 CPUs for best performance
+    logger.info("Running static quantization with QDQ format...")
     quantize_static(
-        model_input=str(model_path),
+        model_input=str(model_preproc_path),
         model_output=str(output_path),
         calibration_data_reader=calibration_reader,
-        quant_format=QuantFormat.QOperator if per_channel else QuantFormat.QOperator,
+        quant_format=QuantFormat.QDQ,  # QDQ format: QuantizeLinear/DequantizeLinear
         weight_type=QuantType.QInt8,
+        per_channel=per_channel,
         reduce_range=reduce_range,
-        per_channel=per_channel
     )
 
     logger.info(f"Quantization complete! Output size: {format_size(output_path.stat().st_size)}")
@@ -106,6 +124,8 @@ def quantize_model_static(
     metadata.update({
         "quantization": {
             "method": "static",
+            "quant_format": "QDQ",
+            "weight_type": "QInt8",
             "per_channel": per_channel,
             "reduce_range": reduce_range,
             "calibration_samples": len(calibration_data)
@@ -214,6 +234,93 @@ def prepare_quantized_model(
         int8_path = quantize_model_dynamic(fp32_path)
 
     return fp32_path, int8_path
+
+
+def compare_fp32_int8(
+    fp32_path: Path,
+    int8_path: Path,
+    test_data_count: int = 10,
+    provider: str = "CPUExecutionProvider"
+) -> Dict[str, Any]:
+    """Compare FP32 and INT8 model inference results.
+
+    Args:
+        fp32_path: Path to FP32 ONNX model
+        int8_path: Path to INT8 ONNX model
+        test_data_count: Number of test samples to compare
+        provider: ONNX Runtime execution provider
+
+    Returns:
+        Comparison dictionary with latency and accuracy
+    """
+    import onnxruntime as ort
+    import numpy as np
+
+    fp32_sess = ort.InferenceSession(str(fp32_path), providers=[provider])
+    int8_sess = ort.InferenceSession(str(int8_path), providers=[provider])
+
+    input_name = fp32_sess.get_inputs()[0].name
+
+    # Generate test data
+    test_data = [np.random.rand(1, 784).astype(np.float32) for _ in range(test_data_count)]
+
+    fp32_preds = []
+    int8_preds = []
+
+    for x in test_data:
+        # FP32 inference
+        fp32_out = fp32_sess.run(None, {input_name: x})[0]
+        # INT8 inference
+        int8_out = int8_sess.run(None, {input_name: x})[0]
+
+        # Get predicted class (argmax)
+        fp32_pred = np.argmax(fp32_out, axis=1)[0]
+        int8_pred = np.argmax(int8_out, axis=1)[0]
+
+        fp32_preds.append(fp32_pred)
+        int8_preds.append(int8_pred)
+
+    # Calculate accuracy (percentage of matching predictions)
+    matching = sum(1 for a, b in zip(fp32_preds, int8_preds) if a == b)
+    accuracy = matching / test_data_count * 100 if test_data_count > 0 else 0
+
+    # Calculate latency
+    import time
+    latencies_fp32 = []
+    latencies_int8 = []
+
+    for x in test_data[:5]:
+        start = time.perf_counter()
+        fp32_sess.run(None, {input_name: x})
+        latencies_fp32.append((time.perf_counter() - start) * 1000)
+
+    for x in test_data[:5]:
+        start = time.perf_counter()
+        int8_sess.run(None, {input_name: x})
+        latencies_int8.append((time.perf_counter() - start) * 1000)
+
+    results = {
+        "fp32_size_bytes": fp32_path.stat().st_size,
+        "int8_size_bytes": int8_path.stat().st_size,
+        "size_reduction_percent": (fp32_path.stat().st_size - int8_path.stat().st_size) / fp32_path.stat().st_size * 100,
+        "fp32_mean_latency_ms": np.mean(latencies_fp32) if latencies_fp32 else 0,
+        "int8_mean_latency_ms": np.mean(latencies_int8) if latencies_int8 else 0,
+        "fp32_std_latency_ms": float(np.std(latencies_fp32)) if latencies_fp32 else 0,
+        "int8_std_latency_ms": float(np.std(latencies_int8)) if latencies_int8 else 0,
+        "fp32_p95_latency_ms": float(np.percentile(latencies_fp32, 95)) if latencies_fp32 else 0,
+        "int8_p95_latency_ms": float(np.percentile(latencies_int8, 95)) if latencies_int8 else 0,
+        "accuracy_percent": accuracy,
+        "num_test_samples": test_data_count,
+        "provider": provider
+    }
+
+    logger.info(f"FP32 vs INT8 comparison:")
+    logger.info(f"  Size reduction: {results['size_reduction_percent']:.1f}%")
+    logger.info(f"  FP32 mean latency: {results['fp32_mean_latency_ms']:.2f} ms")
+    logger.info(f"  INT8 mean latency: {results['int8_mean_latency_ms']:.2f} ms")
+    logger.info(f"  Accuracy (argmax agreement): {results['accuracy_percent']:.1f}%")
+
+    return results
 
 
 if __name__ == "__main__":

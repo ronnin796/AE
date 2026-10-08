@@ -1,6 +1,7 @@
 //! Protocol message definitions
 
 use serde::{Deserialize, Serialize};
+use crate::{Envelope, MessageType};
 
 /// Node registration request (edge -> server)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +120,22 @@ pub struct InferenceResult {
     pub inference_time_ms: f64,
     pub success: bool,
     pub error: Option<String>,
+}
+
+/// Send an inference result to the server
+///
+/// This is a free-standing function that reuses the existing `send_request`
+/// helper on `NetworkClient`.  It accepts `&NetworkClient`, `Envelope` and
+/// returns `Result<()>`.
+pub async fn send_inference_result(
+    client: &mut crate::NetworkClient,
+    envelope: Envelope,
+) -> anyhow::Result<()> {
+    let response = client.send_request(envelope).await?;
+    if response.msg_type != MessageType::InferenceResult {
+        anyhow::bail!("Expected InferenceResult, got {:?}", response.msg_type);
+    }
+    Ok(())
 }
 
 /// Error message from server

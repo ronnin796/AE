@@ -4,7 +4,7 @@ use tokio::time::interval;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 use aetheredge_edge::{Config, NodeIdentity, NetworkClient, TelemetryCollector};
 
 #[derive(Parser, Debug)]
@@ -33,6 +33,18 @@ struct Args {
     /// Disable heartbeat
     #[arg(long, env = "AETHEREDGE_NO_HEARTBEAT")]
     no_heartbeat: bool,
+
+    /// Path to ONNX model for local inference
+    #[arg(long, env = "AETHEREDGE_INFERENCE_MODEL")]
+    inference_model: Option<String>,
+
+    /// Run a single local inference then exit
+    #[arg(long, env = "AETHEREDGE_INFERENCE_ONCE")]
+    inference_once: bool,
+
+    /// Inference interval in seconds (for periodic inference mode)
+    #[arg(long, env = "AETHEREDGE_INFERENCE_INTERVAL", default_value = "30")]
+    inference_interval: u64,
 
     /// Log level
     #[arg(long, env = "AETHEREDGE_LOG_LEVEL", default_value = "info")]
@@ -74,7 +86,7 @@ async fn main() -> Result<()> {
     let register_response = network_client.register(&node_identity).await
         .context("Node registration failed")?;
     info!("[AGENT] Registration successful: {}", register_response.message);
-    info!("[AGENT] Server config: heartbeat_interval={}s, telemetry_interval={}s", 
+    info!("[AGENT] Server config: heartbeat_interval={}s, telemetry_interval={}s",
           register_response.config.as_ref().map(|c| c.heartbeat_interval).unwrap_or(0),
           register_response.config.as_ref().map(|c| c.telemetry_interval).unwrap_or(0));
 
@@ -138,6 +150,109 @@ async fn main() -> Result<()> {
                     Err(e) => {
                         error!("[AGENT] Telemetry collection failed: {}", e);
                     }
+                }
+            }
+        });
+    }
+
+    // Start inference task (local edge inference on the edge node)
+    if args.inference_model.is_some() {
+        let tel_client = network_client.clone();
+        let tel_identity = node_identity.clone();
+        let model_path = args.inference_model.clone().unwrap();
+        let inference_once = args.inference_once;
+        let inference_interval = args.inference_interval;
+
+        tokio::spawn(async move {
+            // Load the model locally
+            let mut engine = match aetheredge_edge::inference::InferenceEngine::new(
+                std::path::Path::new(&model_path),
+            ) {
+                Ok(e) => e,
+                Err(e) => {
+                    error!("[AGENT] Failed to load inference model from {}: {}", model_path, e);
+                    return;
+                }
+            };
+            info!("[AGENT] Inference model loaded from: {}", model_path);
+
+            // Model metadata for input preparation
+            // Input shape for SimpleMLP: [1, 784]
+            let input_shape: Vec<usize> = vec![1, 784];
+            let input_size = input_shape[0] * input_shape[1];
+            let num_classes = 10;
+
+            let mut interval = interval(Duration::from_secs(inference_interval));
+            loop {
+                interval.tick().await;
+
+                // Build a deterministic input (normalized to [0, 1])
+                let input = aetheredge_edge::inference::InferenceEngine::deterministic_input(
+                    tel_identity.node_id.hash(),
+                    input_size,
+                );
+
+                // Run inference locally on the edge node
+                let (output, latency_ms) = match engine.infer_timed(&input, &input_shape) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        error!("[AGENT] Inference failed: {}", e);
+                        continue;
+                    }
+                };
+
+                // Compute predicted class
+                let predicted_class = output
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0);
+
+                // Log inference result
+                info!(
+                    "[AGENT] Local inference complete: input_shape={:?}, output_shape=[1, {}], latency={:.2}ms, predicted_class={}",
+                    input_shape, num_classes, latency_ms, predicted_class
+                );
+
+                // Emit inference metrics via telemetry (reuse existing infra)
+                // Build an inference result payload and send it as a telemetry-like message
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                let inference_payload = aetheredge_edge::protocol::serialize(
+                    &aetheredge_edge::protocol::messages::InferenceResult {
+                        request_id: format!("local-{}", now),
+                        node_id: tel_identity.node_id.clone(),
+                        model_id: model_path.clone(),
+                        timestamp: now,
+                        output: output.clone(),
+                        output_shape: vec![1, num_classes],
+                        inference_time_ms: latency_ms,
+                        success: true,
+                        error: None,
+                    },
+                ).unwrap_or_default();
+
+                let env = aetheredge_edge::protocol::Envelope {
+                    version: aetheredge_edge::protocol::PROTOCOL_VERSION,
+                    msg_type: aetheredge_edge::protocol::MessageType::InferenceResult,
+                    sequence: 0,
+                    timestamp: now,
+                    payload: inference_payload,
+                };
+
+                match tel_client.send_inference_result(env).await {
+                    Ok(_) => debug!("[AGENT] Inference result sent to server"),
+                    Err(e) => warn!("[AGENT] Failed to send inference result: {}", e),
+                }
+
+                // Exit after a single inference if requested
+                if inference_once {
+                    info!("[AGENT] Inference-once mode complete, exiting inference task");
+                    break;
                 }
             }
         });

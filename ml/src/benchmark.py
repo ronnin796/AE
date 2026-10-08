@@ -14,7 +14,7 @@ import numpy as np
 
 # Add parent directory to path for utils import
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from utils import setup_logging, format_size
+from src.utils import setup_logging, format_size
 
 logger = logging.getLogger(__name__)
 

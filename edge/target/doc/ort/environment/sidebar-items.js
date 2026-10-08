@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init","init_from"],"struct":["Environment","EnvironmentBuilder","GlobalThreadPoolOptions"],"trait":["ThreadManager"]};

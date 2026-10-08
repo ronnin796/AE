@@ -73,5 +73,13 @@ class Node(Base):
         lazy="dynamic",
     )
 
+    # Relationship to inference metrics
+    inference_metrics: Mapped[list["InferenceMetrics"]] = relationship(
+        "InferenceMetrics",
+        back_populates="node",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
+
     def __repr__(self) -> str:
         return f"<Node(node_id={self.node_id}, hostname={self.hostname}, status={self.status})>"

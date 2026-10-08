@@ -88,7 +88,7 @@ function AppContent() {
           <div className="content-area" role="main">
             {selectedNode && nodeDetail && !nodeLoading ? (
               <>
-                <NodeDetail node={nodeDetail} stats={stats} onNodeDeleted={handleNodeDeleted} />
+                <NodeDetail node={nodeDetail} stats={stats} aggregatedTelemetry={aggregatedTelemetry} onNodeDeleted={handleNodeDeleted} />
               </>
             ) : selectedNode && nodeLoading ? (
               <div className="loading-detail" role="status" aria-live="polite">
